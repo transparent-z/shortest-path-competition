@@ -41,6 +41,7 @@ struct CSR {
 static int V, E, flags;
 static CSR fw, rv;
 static int lattice_side = 0;
+static bool graph_directed = false;
 static int minimum_weight = std::numeric_limits<int>::max();
 
 static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
@@ -57,7 +58,7 @@ static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
 
 static void read_graph(const char* path) {
     Input in(path); V = (int)in.integer(); E = (int)in.integer(); flags = (int)in.integer();
-    bool directed = flags & 2;
+    bool directed = flags & 2; graph_directed = directed;
     vector<std::array<int, 3>> es; es.reserve(directed ? E : 2LL * E);
     for (int i = 0; i < E; ++i) {
         int a = (int)in.integer(), b = (int)in.integer(), w = (int)in.integer();
@@ -176,6 +177,69 @@ static vector<Query> qs;
 static vector<int64_t> ans;
 static vector<int> head, nextq;
 
+// ALT tables.  For landmark l, from_landmark[l*V+v] is d(l,v), while
+// to_landmark is d(v,l).  Keeping both tables is essential on directed graphs:
+// triangle inequalities give d(l,t)-d(l,v) and d(v,l)-d(t,l).
+static vector<u64> from_landmark, to_landmark;
+static int landmark_count = 0;
+
+static vector<u64> landmark_sssp(int root, const CSR& g) {
+    vector<u64> d(V, INF); RadixHeap h; d[root]=0; h.push(0,root);
+    while(!h.empty()) { auto [du,u]=h.pop(); if(du!=d[u]) continue;
+        for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];u64 nd=du+(uint32_t)e.w;
+            if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}
+        }
+    }
+    return d;
+}
+
+static void build_landmarks(int count) {
+    landmark_count=count; from_landmark.reserve((size_t)count*V);
+    if(graph_directed) to_landmark.reserve((size_t)count*V);
+    int root=0;
+    for(int v=1;v<V;++v) if(fw.off[v+1]-fw.off[v]+rv.off[v+1]-rv.off[v] >
+                              fw.off[root+1]-fw.off[root]+rv.off[root+1]-rv.off[root]) root=v;
+    vector<u64> nearest(V,INF);
+    for(int k=0;k<count;++k) {
+        vector<u64> a=landmark_sssp(root,fw);
+        vector<u64> b=graph_directed?landmark_sssp(root,rv):vector<u64>();
+        from_landmark.insert(from_landmark.end(),a.begin(),a.end());
+        if(graph_directed) to_landmark.insert(to_landmark.end(),b.begin(),b.end());
+        u64 far=0; int next=root;
+        for(int v=0;v<V;++v) {
+            u64 sep=a[v];
+            if(graph_directed && b[v]!=INF) sep=sep==INF?b[v]:std::min(sep,b[v]);
+            nearest[v]=std::min(nearest[v],sep);
+            if(nearest[v]!=INF && nearest[v]>far){far=nearest[v];next=v;}
+        }
+        root=next;
+    }
+}
+
+static inline u64 alt_h(int v,int t) {
+    u64 h=0;
+    for(int k=0;k<landmark_count;++k) {
+        size_t z=(size_t)k*V; u64 lv=from_landmark[z+v],lt=from_landmark[z+t];
+        if(lv!=INF&&lt!=INF&&lt>lv) h=std::max(h,lt-lv);
+        if(graph_directed) { u64 vl=to_landmark[z+v],tl=to_landmark[z+t];
+            if(vl!=INF&&tl!=INF&&vl>tl) h=std::max(h,vl-tl);
+        } else if(lv!=INF&&lt!=INF&&lv>lt) h=std::max(h,lv-lt);
+    }
+    return h;
+}
+
+static int64_t alt_astar(int s,int t) {
+    if(s==t)return 0;
+    ++epoch; hf.clear(); setf(s,0); hf.push(alt_h(s,t),s);
+    while(!hf.empty()) { auto [key,u]=hf.pop(); u64 d=getf(u); if(key!=d+alt_h(u,t))continue;
+        if(u==t)return (int64_t)d;
+        for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;
+            if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+alt_h(e.to,t),e.to);}
+        }
+    }
+    return -1;
+}
+
 // One Dijkstra answers all queries sharing an endpoint.  Search direction is
 // selected by the repeated endpoint, and it stops as soon as the last requested
 // opposite endpoint is settled.
@@ -208,12 +272,24 @@ static void run_queries(const char* qpath, const char* opath) {
     Input in(qpath); int Q=(int)in.integer(); qs.resize(Q); ans.assign(Q,-1); nextq.resize(Q); head.assign(V,-1);
     std::unordered_map<int,vector<int>> bys, byt; bys.reserve(Q/2); byt.reserve(Q/2);
     for(int i=0;i<Q;++i){ int s=(int)in.integer(),t=(int)in.integer(); qs[i]={s,t}; if(s==t) ans[i]=0; else {bys[s].push_back(i);byt[t].push_back(i);} }
+    // Select preprocessing from observable workload/graph properties.  ALT is
+    // amortized only for query-heavy graphs; sparse-query and degree-six
+    // lattice workloads retain the faster bidirectional baseline.
+    double qpv=double(Q)/V, avgdeg=double(fw.edge.size())/V;
+    int nl=0;
+    if(qpv>=5.0) nl=0; // endpoint grouping dominates on very query-heavy graphs
+    else if(qpv>=0.5 && avgdeg<5.0) nl=12;
+    // Directed road landmarks were exact but failed to repay their larger
+    // tables and per-pop bound evaluation; retain bidirectional Dijkstra.
+    // Low-degree power-law graphs make weak landmarks; their repeated hot
+    // targets are handled more cheaply by grouped reverse searches below.
+    if(nl) build_landmarks(nl);
     vector<uint8_t> done(Q,0);
     // Repeated targets are especially valuable on the scale-free hub workload.
     for(auto& kv:byt) if(kv.second.size()>=4){ grouped(kv.second,false); for(int id:kv.second)done[id]=1; }
     // Balanced-source huge-Q workloads amortize one search over many targets.
     for(auto& kv:bys){ vector<int> ids; if(kv.second.size()>=4){ for(int id:kv.second)if(!done[id])ids.push_back(id); if(ids.size()>=4){grouped(ids,true);for(int id:ids)done[id]=1;} } }
-    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=bidijkstra(qs[i].s,qs[i].t);
+    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=landmark_count?alt_astar(qs[i].s,qs[i].t):bidijkstra(qs[i].s,qs[i].t);
     FILE* out=std::fopen(opath,"wb"); if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);} char buf[64];
     for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);} std::fclose(out);
 }
