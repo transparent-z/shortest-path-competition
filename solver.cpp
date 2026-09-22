@@ -42,6 +42,7 @@ static int V, E, flags;
 static CSR fw, rv;
 static vector<int> gx, gy;
 static int lattice_side = 0;
+static bool graph_directed = false;
 static int minimum_weight = std::numeric_limits<int>::max();
 
 static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
@@ -58,7 +59,7 @@ static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
 
 static void read_graph(const char* path) {
     Input in(path); V = (int)in.integer(); E = (int)in.integer(); flags = (int)in.integer();
-    bool directed = flags & 2;
+    bool directed = flags & 2; graph_directed = directed;
     vector<std::array<int, 3>> es; es.reserve(directed ? E : 2LL * E);
     for (int i = 0; i < E; ++i) {
         int a = (int)in.integer(), b = (int)in.integer(), w = (int)in.integer();
@@ -176,6 +177,20 @@ struct Query { int s,t; };
 static vector<Query> qs;
 static vector<int64_t> ans;
 static vector<int> head, nextq;
+static vector<u64> from_landmark, to_landmark;
+static int landmark_count=0;
+static vector<u64> full_sssp(int root,const CSR& g);
+
+static void build_landmarks(int count){
+    landmark_count=count;from_landmark.reserve((size_t)count*V);if(graph_directed)to_landmark.reserve((size_t)count*V);
+    int root=0;for(int v=1;v<V;++v)if(fw.off[v+1]-fw.off[v]+rv.off[v+1]-rv.off[v]>fw.off[root+1]-fw.off[root]+rv.off[root+1]-rv.off[root])root=v;
+    vector<u64> nearest(V,INF);
+    for(int k=0;k<count;++k){auto a=full_sssp(root,fw);auto b=graph_directed?full_sssp(root,rv):vector<u64>();from_landmark.insert(from_landmark.end(),a.begin(),a.end());if(graph_directed)to_landmark.insert(to_landmark.end(),b.begin(),b.end());u64 far=0;int next=root;for(int v=0;v<V;++v){u64 sep=a[v];if(graph_directed&&b[v]!=INF)sep=sep==INF?b[v]:std::min(sep,b[v]);nearest[v]=std::min(nearest[v],sep);if(nearest[v]!=INF&&nearest[v]>far){far=nearest[v];next=v;}}root=next;}
+}
+
+static inline u64 alt_h(int v,int t){u64 h=0;for(int k=0;k<landmark_count;++k){size_t z=(size_t)k*V;u64 lv=from_landmark[z+v],lt=from_landmark[z+t];if(lv!=INF&&lt!=INF&&lt>lv)h=std::max(h,lt-lv);if(graph_directed){u64 vl=to_landmark[z+v],tl=to_landmark[z+t];if(vl!=INF&&tl!=INF&&vl>tl)h=std::max(h,vl-tl);}else if(lv!=INF&&lt!=INF&&lv>lt)h=std::max(h,lv-lt);}return h;}
+
+static int64_t alt_astar(int s,int t){if(s==t)return 0;++epoch;hf.clear();setf(s,0);hf.push(alt_h(s,t),s);while(!hf.empty()){auto[key,u]=hf.pop();u64 d=getf(u);if(key!=d+alt_h(u,t))continue;if(u==t)return (int64_t)d;for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+alt_h(e.to,t),e.to);}}}return -1;}
 static vector<int8_t> separator_side;
 static vector<u64> separator_from, separator_to;
 static int separator_count=0;
@@ -240,12 +255,14 @@ static void run_queries(const char* qpath, const char* opath) {
         for(auto& kv:byt){vector<int> neg,pos;for(int id:kv.second)if(!handled[id])((separator_side[qs[id].s]<0)?neg:pos).push_back(id);if(!neg.empty())grouped_side(neg);if(!pos.empty())grouped_side(pos);for(int id:kv.second)handled[id]=1;}
         FILE* out=std::fopen(opath,"wb");if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);}char buf[64];for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);}std::fclose(out);return;
     }
+    double qpv=double(Q)/V,avgdeg=double(fw.edge.size())/V;
+    if(qpv>=0.5&&qpv<5.0&&avgdeg<5.0)build_landmarks(12);
     vector<uint8_t> done(Q,0);
     // Repeated targets are especially valuable on the scale-free hub workload.
     for(auto& kv:byt) if(kv.second.size()>=4){ grouped(kv.second,false); for(int id:kv.second)done[id]=1; }
     // Balanced-source huge-Q workloads amortize one search over many targets.
     for(auto& kv:bys){ vector<int> ids; if(kv.second.size()>=4){ for(int id:kv.second)if(!done[id])ids.push_back(id); if(ids.size()>=4){grouped(ids,true);for(int id:ids)done[id]=1;} } }
-    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=bidijkstra(qs[i].s,qs[i].t);
+    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=landmark_count?alt_astar(qs[i].s,qs[i].t):bidijkstra(qs[i].s,qs[i].t);
     FILE* out=std::fopen(opath,"wb"); if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);} char buf[64];
     for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);} std::fclose(out);
 }

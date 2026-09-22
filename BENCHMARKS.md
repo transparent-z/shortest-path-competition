@@ -93,3 +93,11 @@ Fresh-seed validation passed on seed 333333: a newly generated 50,176-vertex
 `hugeq_dev` graph was forced through separator dispatch with 250,000 appended
 self-pairs, and the first 10,000 nontrivial answers matched `refsolve` exactly.
 All six ordinary dev workloads also matched their answer files.
+
+## Combined certification candidate
+
+The proven 12-landmark undirected ALT path and the half-width one-level
+separator overlay are now combined.  Dispatch is structural: ALT requires
+0.5 <= Q/V < 5 and average degree below 5; the separator requires coordinates
+and Q/V >= 5.  All other workloads retain the `d347d0e` algorithms.  All six
+dev answer files match before starting the full official certification run.
