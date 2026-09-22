@@ -141,3 +141,64 @@ median separator widths make even the first pair of uint64 forward/reverse
 tables approximately 2.6 GB and 45 GB respectively, before deeper levels.
 Scale-free graphs lack a small geometric vertex separator, so the existing
 hot-target grouping remains the stronger applicable method.
+
+## Generator-structure analysis for leaderboard-scale research
+
+* **road2d** is an `S x S` row-major lattice with both directions on every
+  horizontal/vertical edge, plus only adjacent-cell diagonals.  Coordinates
+  jitter inside cells but do not alter this topology.  Entire row/column road
+  lines are accelerated periodically: arterial and highway strides are 16/128
+  on large and 8/64 on dev.  Thus exact cell boundaries, separators, and a
+  contraction order retaining fast lines are seed-independent structural
+  features.  Rank queries span 2^8..2^17, so a useful hierarchy must accelerate
+  both neighborhood and regional routes; Euclidean A* alone cannot model the
+  periodic speeds.
+* **2-D lattices** are chord-free, undirected row-major tori of degree four.
+  `local2d` has uniform 1..1000 weights and 90% rank-at-most-4096 queries;
+  `wide64` has log-uniform 1e8..1e9 weights and ranks 2^12..2^20.  Exact nested
+  dissection has O(sqrt(V)) top separators, but dense per-vertex separator
+  tables violate the 4 GB limit on wide64; compact shortcut/overlay graphs are
+  required.
+* **lattice3d** is a degree-six torus.  Its O(V^(2/3)) slab separator makes the
+  same dense-table approach substantially less attractive than in 2-D.
+* **scalefree** gives every nonsink exactly three outgoing arcs while a Pareto
+  in-degree distribution creates the hubs; 30% of queries explicitly target
+  the top 0.1% by in-degree.  Exact hub decomposition needs a fallback because
+  not every shortest path intersects a selected hub.  Reverse grouping already
+  exploits repeated hub targets, so useful labels must eliminate search rather
+  than merely provide another heuristic.
+
+### Road2d exact arterial-cell overlay experiment
+
+A CRP-style exact overlay was prototyped after inferring the arterial period
+from observable per-row edge-weight averages.  Each arterial-sized grid cell
+was replaced by the complete directed distance graph on its boundary; queries
+ran restricted searches in the endpoint cells and Dijkstra on the boundary
+overlay.  It was exact on all 10,000 road2d_dev answers, but total time was
+9.787 s versus 4.029 s for the paired BEST (2.43x slower).  The dense boundary
+cliques and large upward search space dominate, so this one-level overlay is
+rejected; a competitive road hierarchy needs contraction/witness suppression
+or multiple sparse customization levels rather than boundary cliques.
+
+### Scale-free exact hub-route upper-bound experiment
+
+The 32 highest observed in-degree vertices were given complete forward and
+reverse distance tables.  Their exact two-hop routes supplied an initial upper
+bound to bidirectional Dijkstra, retaining fallback correctness when a shortest
+path misses all selected hubs.  On scalefree_dev it was exact but took 7.812 s
+versus 7.646 s paired BEST.  Preprocessing plus table probes outweighed pruning,
+showing that the generator's high in-degree hubs do not form a sufficiently
+complete shortest-path cover.  This exact limited hub-label family is rejected
+rather than tuning k for percent-level changes.
+
+### 2-D torus contraction experiment
+
+An exact undirected contraction hierarchy using lazy minimum-degree elimination
+and conservative clique shortcuts was tested on the chord-free torus.  The
+50,176-vertex dev graph required about 12.826 s of preprocessing alone when
+forced through the hierarchy.  On local2d_large, preprocessing had not finished
+after 125 s and was stopped, already exceeding the complete retained ALT
+runtime.  Although query answers on the completed dev hierarchy were exact,
+generic minimum-degree elimination does not scale to the 300k/2M grids.  A
+leaderboard-scale grid CH needs an implicit nested-dissection representation or
+witness-suppressed shortcuts, not per-vertex unordered-map clique closure.
