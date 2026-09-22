@@ -40,8 +40,8 @@ struct CSR {
 
 static int V, E, flags;
 static CSR fw, rv;
+static vector<int> gx, gy;
 static int lattice_side = 0;
-static bool graph_directed = false;
 static int minimum_weight = std::numeric_limits<int>::max();
 
 static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
@@ -58,7 +58,7 @@ static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
 
 static void read_graph(const char* path) {
     Input in(path); V = (int)in.integer(); E = (int)in.integer(); flags = (int)in.integer();
-    bool directed = flags & 2; graph_directed = directed;
+    bool directed = flags & 2;
     vector<std::array<int, 3>> es; es.reserve(directed ? E : 2LL * E);
     for (int i = 0; i < E; ++i) {
         int a = (int)in.integer(), b = (int)in.integer(), w = (int)in.integer();
@@ -67,7 +67,7 @@ static void read_graph(const char* path) {
     }
     // Coordinates are deliberately skipped: the globally admissible Euclidean
     // potential is weak on the variable-speed road family.
-    if (flags & 1) for (int i = 0; i < V; ++i) { (void)in.integer(); (void)in.integer(); }
+    if (flags & 1) { gx.resize(V);gy.resize(V);for(int i=0;i<V;++i){gx[i]=(int)in.integer();gy[i]=(int)in.integer();} }
     // Recognize (rather than assume) the 2-D torus topology.  Its Manhattan
     // distance times the lightest edge is an exact admissible potential.  It is
     // useful for wide-weight lattices, but too weak to pay for itself when the
@@ -176,68 +176,31 @@ struct Query { int s,t; };
 static vector<Query> qs;
 static vector<int64_t> ans;
 static vector<int> head, nextq;
+static vector<int8_t> separator_side;
+static vector<u64> separator_from, separator_to;
+static int separator_count=0;
 
-// ALT tables.  For landmark l, from_landmark[l*V+v] is d(l,v), while
-// to_landmark is d(v,l).  Keeping both tables is essential on directed graphs:
-// triangle inequalities give d(l,t)-d(l,v) and d(v,l)-d(t,l).
-static vector<u64> from_landmark, to_landmark;
-static int landmark_count = 0;
+static vector<u64> full_sssp(int root,const CSR& g){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
 
-static vector<u64> landmark_sssp(int root, const CSR& g) {
-    vector<u64> d(V, INF); RadixHeap h; d[root]=0; h.push(0,root);
-    while(!h.empty()) { auto [du,u]=h.pop(); if(du!=d[u]) continue;
-        for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];u64 nd=du+(uint32_t)e.w;
-            if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}
-        }
-    }
-    return d;
+static void build_separator(){
+    separator_side.assign(V,0);int xmin=gx[0],xmax=xmin,ymin=gy[0],ymax=ymin;for(int v=1;v<V;++v){xmin=std::min(xmin,gx[v]);xmax=std::max(xmax,gx[v]);ymin=std::min(ymin,gy[v]);ymax=std::max(ymax,gy[v]);}
+    bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin;vector<int> vals(V);for(int v=0;v<V;++v)vals[v]=xa?gx[v]:gy[v];std::nth_element(vals.begin(),vals.begin()+V/2,vals.end());int cut=vals[V/2];for(int v=0;v<V;++v)separator_side[v]=((xa?gx[v]:gy[v])<cut)?-1:1;
+    // One endpoint per crossing edge is sufficient: choosing its positive-side
+    // endpoint is a vertex cover of all median-plane arcs and halves the table.
+    vector<uint8_t> sep(V);for(int u=0;u<V;++u)for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to;if(separator_side[u]!=separator_side[v])sep[separator_side[u]>0?u:v]=1;}
+    vector<int> hubs;for(int v=0;v<V;++v)if(sep[v]){separator_side[v]=0;hubs.push_back(v);}separator_count=hubs.size();
+    separator_from.resize((size_t)V*separator_count);separator_to.resize((size_t)V*separator_count);
+    for(int k=0;k<separator_count;++k){auto a=full_sssp(hubs[k],fw),b=full_sssp(hubs[k],rv);for(int v=0;v<V;++v){separator_from[(size_t)v*separator_count+k]=a[v];separator_to[(size_t)v*separator_count+k]=b[v];}}
 }
 
-static void build_landmarks(int count) {
-    landmark_count=count; from_landmark.reserve((size_t)count*V);
-    if(graph_directed) to_landmark.reserve((size_t)count*V);
-    int root=0;
-    for(int v=1;v<V;++v) if(fw.off[v+1]-fw.off[v]+rv.off[v+1]-rv.off[v] >
-                              fw.off[root+1]-fw.off[root]+rv.off[root+1]-rv.off[root]) root=v;
-    vector<u64> nearest(V,INF);
-    for(int k=0;k<count;++k) {
-        vector<u64> a=landmark_sssp(root,fw);
-        vector<u64> b=graph_directed?landmark_sssp(root,rv):vector<u64>();
-        from_landmark.insert(from_landmark.end(),a.begin(),a.end());
-        if(graph_directed) to_landmark.insert(to_landmark.end(),b.begin(),b.end());
-        u64 far=0; int next=root;
-        for(int v=0;v<V;++v) {
-            u64 sep=a[v];
-            if(graph_directed && b[v]!=INF) sep=sep==INF?b[v]:std::min(sep,b[v]);
-            nearest[v]=std::min(nearest[v],sep);
-            if(nearest[v]!=INF && nearest[v]>far){far=nearest[v];next=v;}
-        }
-        root=next;
-    }
-}
+static u64 separator_answer(int s,int t){u64 z=INF;size_t a=(size_t)s*separator_count,b=(size_t)t*separator_count;for(int k=0;k<separator_count;++k){u64 x=separator_to[a+k],y=separator_from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
 
-static inline u64 alt_h(int v,int t) {
-    u64 h=0;
-    for(int k=0;k<landmark_count;++k) {
-        size_t z=(size_t)k*V; u64 lv=from_landmark[z+v],lt=from_landmark[z+t];
-        if(lv!=INF&&lt!=INF&&lt>lv) h=std::max(h,lt-lv);
-        if(graph_directed) { u64 vl=to_landmark[z+v],tl=to_landmark[z+t];
-            if(vl!=INF&&tl!=INF&&vl>tl) h=std::max(h,vl-tl);
-        } else if(lv!=INF&&lt!=INF&&lv>lt) h=std::max(h,lv-lt);
-    }
-    return h;
-}
-
-static int64_t alt_astar(int s,int t) {
-    if(s==t)return 0;
-    ++epoch; hf.clear(); setf(s,0); hf.push(alt_h(s,t),s);
-    while(!hf.empty()) { auto [key,u]=hf.pop(); u64 d=getf(u); if(key!=d+alt_h(u,t))continue;
-        if(u==t)return (int64_t)d;
-        for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;
-            if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+alt_h(e.to,t),e.to);}
-        }
-    }
-    return -1;
+static void grouped_side(const vector<int>& ids){
+    ++epoch;hf.clear();int root=qs[ids[0]].t;int8_t side=separator_side[root];vector<int> touched;int remaining=0;
+    for(int id:ids){int x=qs[id].s;if(head[x]==-1){touched.push_back(x);++remaining;}nextq[id]=head[x];head[x]=id;}
+    setf(root,0);hf.push(0,root);
+    while(!hf.empty()&&remaining){auto[d,u]=hf.pop();if(d!=getf(u))continue;if(head[u]!=-1){for(int id=head[u];id!=-1;id=nextq[id])ans[id]=ans[id]<0?(int64_t)d:std::min(ans[id],(int64_t)d);head[u]=-1;--remaining;}for(int j=rv.off[u];j<rv.off[u+1];++j){Arc e=rv.edge[j];if(separator_side[e.to]!=side)continue;u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd,e.to);}}}
+    for(int x:touched)head[x]=-1;
 }
 
 // One Dijkstra answers all queries sharing an endpoint.  Search direction is
@@ -272,24 +235,17 @@ static void run_queries(const char* qpath, const char* opath) {
     Input in(qpath); int Q=(int)in.integer(); qs.resize(Q); ans.assign(Q,-1); nextq.resize(Q); head.assign(V,-1);
     std::unordered_map<int,vector<int>> bys, byt; bys.reserve(Q/2); byt.reserve(Q/2);
     for(int i=0;i<Q;++i){ int s=(int)in.integer(),t=(int)in.integer(); qs[i]={s,t}; if(s==t) ans[i]=0; else {bys[s].push_back(i);byt[t].push_back(i);} }
-    // Select preprocessing from observable workload/graph properties.  ALT is
-    // amortized only for query-heavy graphs; sparse-query and degree-six
-    // lattice workloads retain the faster bidirectional baseline.
-    double qpv=double(Q)/V, avgdeg=double(fw.edge.size())/V;
-    int nl=0;
-    if(qpv>=5.0) nl=0; // endpoint grouping dominates on very query-heavy graphs
-    else if(qpv>=0.5 && avgdeg<5.0) nl=12;
-    // Directed road landmarks were exact but failed to repay their larger
-    // tables and per-pop bound evaluation; retain bidirectional Dijkstra.
-    // Low-degree power-law graphs make weak landmarks; their repeated hot
-    // targets are handled more cheaply by grouped reverse searches below.
-    if(nl) build_landmarks(nl);
+    if(!gx.empty()&&double(Q)/V>=5.0){
+        build_separator();vector<uint8_t> handled(Q);for(int i=0;i<Q;++i)if(ans[i]<0){u64 z=separator_answer(qs[i].s,qs[i].t);ans[i]=z==INF?-1:(int64_t)z;if(separator_side[qs[i].s]!=separator_side[qs[i].t]||separator_side[qs[i].s]==0)handled[i]=1;}
+        for(auto& kv:byt){vector<int> neg,pos;for(int id:kv.second)if(!handled[id])((separator_side[qs[id].s]<0)?neg:pos).push_back(id);if(!neg.empty())grouped_side(neg);if(!pos.empty())grouped_side(pos);for(int id:kv.second)handled[id]=1;}
+        FILE* out=std::fopen(opath,"wb");if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);}char buf[64];for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);}std::fclose(out);return;
+    }
     vector<uint8_t> done(Q,0);
     // Repeated targets are especially valuable on the scale-free hub workload.
     for(auto& kv:byt) if(kv.second.size()>=4){ grouped(kv.second,false); for(int id:kv.second)done[id]=1; }
     // Balanced-source huge-Q workloads amortize one search over many targets.
     for(auto& kv:bys){ vector<int> ids; if(kv.second.size()>=4){ for(int id:kv.second)if(!done[id])ids.push_back(id); if(ids.size()>=4){grouped(ids,true);for(int id:ids)done[id]=1;} } }
-    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=landmark_count?alt_astar(qs[i].s,qs[i].t):bidijkstra(qs[i].s,qs[i].t);
+    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=bidijkstra(qs[i].s,qs[i].t);
     FILE* out=std::fopen(opath,"wb"); if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);} char buf[64];
     for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);} std::fclose(out);
 }

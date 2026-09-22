@@ -39,3 +39,57 @@ ALT landmarks use farthest-point selection from an observable high-degree
 starting vertex. Directed lower bounds combine `d(L,t)-d(L,v)` and
 `d(v,L)-d(t,L)`; unreachable terms are ignored. Complete preprocessing time is
 included in every timing above.
+
+## Hierarchy research phase 1
+
+| experiment | workload | preprocessing / total | correctness | memory | decision |
+|---|---|---|---|---|---|
+| Geometric nested-dissection CH, conservative shortcut closure | hugeq-size dev graph, 260k-query trigger | preprocessing about 15 s; 10k nontrivial queries plus 250k self-pairs about 33 s | exact without stall-on-demand (10k/10k); experimental stall variant was incorrect and discarded | comfortably below 4 GB | reject: extrapolated 600k query time is far slower than endpoint grouping despite acceptable preprocessing |
+| Greedy minimum-fill CH without witness suppression | hugeq-size graph | exceeded 80 s during preprocessing in exploratory run | query phase not reached | about 275 MB when stopped | reject: uncontrolled fill |
+
+Both CH variants used only observable structure.  The geometric variant proves
+that nested-dissection controls preprocessing fill, but its upward search space
+is still too large; adding a correct stall implementation would not plausibly
+close the several-fold query-time gap observed here.
+
+## Hierarchy research phase 2 — new targeted BEST
+
+A one-level exact geometric separator overlay was implemented for coordinate
+graphs with at least five queries per vertex.  The median-plane crossing
+endpoints form the separator.  Full forward and reverse distance tables from
+all separator vertices answer every cross-separator query exactly.  Same-side
+queries take the minimum of that separator route and a reverse grouped Dijkstra
+restricted to the corresponding side, which is exact because every path that
+leaves the side must touch the separator.
+
+| candidate | workload | preprocessing included | total time | correctness | memory | decision |
+|---|---|---:|---:|---|---|---|
+| Safe endpoint grouping (`d347d0e`) | hugeq_large | yes | about 290 s | exact | low | baseline on this runner |
+| One-level separator overlay + side-restricted grouping | hugeq_large | yes (about 6 s on the same-size dev graph) | about 150 s | exact, all 600,000 official answers | about 0.4 GB tables on same-size graph | **keep: approximately 1.9x targeted improvement** |
+
+The same candidate also matched all 10,000 `hugeq_dev` reference answers when
+forced through the overlay using appended self-pairs.  Dispatch uses only
+coordinates and Q/V, not filenames, seeds, or exact instance sizes.
+
+### Separator-width and alternative-preprocessing follow-up
+
+Selecting only the positive-side endpoint of every crossing arc is still an
+exact vertex-cover separator and halves table memory.  It reduced the forced
+10k-query dev run from about 16.1 s to 13.5 s and remained exact.  The official
+large run was about 158 s and exact, statistically tied with the two-endpoint
+separator run; the half-width version is retained for its lower memory.
+
+Frequency-only full SSSP caching was rejected analytically after measuring the
+endpoint distribution: virtually all 50,176 targets already trigger one
+reverse grouped search, and a complete cached SSSP costs at least as much as
+that early-stopping search.  A source/target mixed cover cannot use fewer than
+about 50k roots because the 12-regular-like query bipartite graph has a matching
+covering essentially every source.  Source-first grouping was also slower in a
+targeted run.  The separator table is therefore the useful hub/partial-table
+hybrid: its roughly 224 structural hubs answer cross-region queries while
+avoiding tens of thousands of full distance tables.
+
+Fresh-seed validation passed on seed 333333: a newly generated 50,176-vertex
+`hugeq_dev` graph was forced through separator dispatch with 250,000 appended
+self-pairs, and the first 10,000 nontrivial answers matched `refsolve` exactly.
+All six ordinary dev workloads also matched their answer files.
