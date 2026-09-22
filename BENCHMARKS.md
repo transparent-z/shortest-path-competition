@@ -101,3 +101,43 @@ separator overlay are now combined.  Dispatch is structural: ALT requires
 0.5 <= Q/V < 5 and average degree below 5; the separator requires coordinates
 and Q/V >= 5.  All other workloads retain the `d347d0e` algorithms.  All six
 dev answer files match before starting the full official certification run.
+
+## Recursive separator phase
+
+A second exact separator level is built independently inside each side of the
+top-level cut.  Its forward/reverse tables are restricted to that parent
+region.  Cross-quarter queries are answered by the minimum of the top and
+second-level tables; same-quarter target groups run only inside one quarter.
+This remains exact because any route leaving a quarter crosses either its
+parent separator or the top separator.
+
+| candidate | workload | total time incl. preprocessing | correctness | decision |
+|---|---|---:|---|---|
+| One-level separator | hugeq_large | about 158 s (earlier run) | exact | previous SAFE |
+| Two-level recursive separator | hugeq_large | **89.264 s** | exact, all 600,000 answers | **keep; 43.5% faster** |
+
+A forced 10,000-query hugeq_dev run also matched every reference answer.
+
+## Third-level separator phase
+
+Each of the four second-level interiors is split once more, with exact distance
+tables restricted to its parent quarter and grouped searches restricted to one
+of eight leaves.  An initial run exposed and fixed an edge case where two
+first-level separator vertices incorrectly consulted an uninitialized deeper
+table; the corrected run matched all 600,000 official answers.
+
+| candidate | workload | total time incl. preprocessing | correctness | decision |
+|---|---|---:|---|---|
+| Two-level overlay | hugeq_large | 89.264 s | exact | previous BEST |
+| Three-level overlay | hugeq_large | **40.340 s** | exact | **keep; 54.8% faster than two-level, ~7.2x faster than safe grouping on this runner** |
+
+The three-level overlay also passed fresh-seed validation on seed 444444: all
+10,000 generated nontrivial `hugeq_dev` answers matched `refsolve` when forced
+through hierarchy dispatch by appended self-pairs.
+
+Further direct application to `road2d_large` and `wide64_large` was rejected on
+memory/preprocessing feasibility rather than filename: their observed V and
+median separator widths make even the first pair of uint64 forward/reverse
+tables approximately 2.6 GB and 45 GB respectively, before deeper levels.
+Scale-free graphs lack a small geometric vertex separator, so the existing
+hot-target grouping remains the stronger applicable method.

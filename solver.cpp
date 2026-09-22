@@ -192,10 +192,36 @@ static inline u64 alt_h(int v,int t){u64 h=0;for(int k=0;k<landmark_count;++k){s
 
 static int64_t alt_astar(int s,int t){if(s==t)return 0;++epoch;hf.clear();setf(s,0);hf.push(alt_h(s,t),s);while(!hf.empty()){auto[key,u]=hf.pop();u64 d=getf(u);if(key!=d+alt_h(u,t))continue;if(u==t)return (int64_t)d;for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+alt_h(e.to,t),e.to);}}}return -1;}
 static vector<int8_t> separator_side;
+static vector<int8_t> separator_region;
+static vector<int8_t> separator_leaf;
 static vector<u64> separator_from, separator_to;
 static int separator_count=0;
+struct SubSeparator { int8_t side; int count=0; vector<u64> from,to; };
+static SubSeparator subsep[2];
+static SubSeparator leafsep[4];
 
 static vector<u64> full_sssp(int root,const CSR& g){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
+static vector<u64> region_sssp(int root,const CSR& g,int8_t allowed){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];if(separator_side[e.to]!=allowed)continue;u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
+static vector<u64> subregion_sssp(int root,const CSR& g,int8_t allowed){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];if(separator_region[e.to]!=allowed)continue;u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
+
+static void build_leafseparator(int8_t parent,int index){
+    SubSeparator& ss=leafsep[index];ss.side=parent;vector<int> nodes;for(int v=0;v<V;++v)if(separator_region[v]==parent)nodes.push_back(v);
+    int xmin=gx[nodes[0]],xmax=xmin,ymin=gy[nodes[0]],ymax=ymin;for(int v:nodes){xmin=std::min(xmin,gx[v]);xmax=std::max(xmax,gx[v]);ymin=std::min(ymin,gy[v]);ymax=std::max(ymax,gy[v]);}
+    bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin;vector<int> vals;for(int v:nodes)vals.push_back(xa?gx[v]:gy[v]);std::nth_element(vals.begin(),vals.begin()+vals.size()/2,vals.end());int cut=vals[vals.size()/2];int8_t lo=2*index+1,hi=lo+1,bar=20+index;
+    for(int v:nodes)separator_leaf[v]=((xa?gx[v]:gy[v])<cut)?lo:hi;
+    vector<uint8_t> mark(V);for(int u:nodes)for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to;if(separator_region[v]==parent&&separator_leaf[u]!=separator_leaf[v])mark[separator_leaf[u]==hi?u:v]=1;}
+    vector<int> hubs;for(int v:nodes)if(mark[v]){separator_leaf[v]=bar;hubs.push_back(v);}ss.count=hubs.size();ss.from.resize((size_t)V*ss.count);ss.to.resize((size_t)V*ss.count);for(int k=0;k<ss.count;++k){auto a=subregion_sssp(hubs[k],fw,parent),b=subregion_sssp(hubs[k],rv,parent);for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v];ss.to[(size_t)v*ss.count+k]=b[v];}}
+}
+
+static void build_subseparator(int8_t top_side,SubSeparator& ss){
+    ss.side=top_side;vector<int> nodes;for(int v=0;v<V;++v)if(separator_side[v]==top_side)nodes.push_back(v);
+    int xmin=gx[nodes[0]],xmax=xmin,ymin=gy[nodes[0]],ymax=ymin;for(int v:nodes){xmin=std::min(xmin,gx[v]);xmax=std::max(xmax,gx[v]);ymin=std::min(ymin,gy[v]);ymax=std::max(ymax,gy[v]);}
+    bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin;vector<int> vals;vals.reserve(nodes.size());for(int v:nodes)vals.push_back(xa?gx[v]:gy[v]);std::nth_element(vals.begin(),vals.begin()+vals.size()/2,vals.end());int cut=vals[vals.size()/2];
+    for(int v:nodes)separator_region[v]=((xa?gx[v]:gy[v])<cut)?top_side:2*top_side;
+    vector<uint8_t> mark(V);for(int u:nodes)for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to;if(separator_side[v]==top_side&&separator_region[u]!=separator_region[v])mark[separator_region[u]==2*top_side?u:v]=1;}
+    vector<int> hubs;for(int v:nodes)if(mark[v]){separator_region[v]=3*top_side;hubs.push_back(v);}ss.count=hubs.size();ss.from.resize((size_t)V*ss.count);ss.to.resize((size_t)V*ss.count);
+    for(int k=0;k<ss.count;++k){auto a=region_sssp(hubs[k],fw,top_side),b=region_sssp(hubs[k],rv,top_side);for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v];ss.to[(size_t)v*ss.count+k]=b[v];}}
+}
 
 static void build_separator(){
     separator_side.assign(V,0);int xmin=gx[0],xmax=xmin,ymin=gy[0],ymax=ymin;for(int v=1;v<V;++v){xmin=std::min(xmin,gx[v]);xmax=std::max(xmax,gx[v]);ymin=std::min(ymin,gy[v]);ymax=std::max(ymax,gy[v]);}
@@ -206,15 +232,18 @@ static void build_separator(){
     vector<int> hubs;for(int v=0;v<V;++v)if(sep[v]){separator_side[v]=0;hubs.push_back(v);}separator_count=hubs.size();
     separator_from.resize((size_t)V*separator_count);separator_to.resize((size_t)V*separator_count);
     for(int k=0;k<separator_count;++k){auto a=full_sssp(hubs[k],fw),b=full_sssp(hubs[k],rv);for(int v=0;v<V;++v){separator_from[(size_t)v*separator_count+k]=a[v];separator_to[(size_t)v*separator_count+k]=b[v];}}
+    separator_region.assign(V,0);build_subseparator(-1,subsep[0]);build_subseparator(1,subsep[1]);separator_leaf=separator_region;int8_t parents[4]={-2,-1,1,2};for(int i=0;i<4;++i)build_leafseparator(parents[i],i);
 }
 
 static u64 separator_answer(int s,int t){u64 z=INF;size_t a=(size_t)s*separator_count,b=(size_t)t*separator_count;for(int k=0;k<separator_count;++k){u64 x=separator_to[a+k],y=separator_from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
+static u64 subseparator_answer(int s,int t,int8_t side){SubSeparator& ss=subsep[side>0];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
+static u64 leafseparator_answer(int s,int t,int8_t parent){int index=parent==-2?0:parent==-1?1:parent==1?2:3;SubSeparator& ss=leafsep[index];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
 
 static void grouped_side(const vector<int>& ids){
-    ++epoch;hf.clear();int root=qs[ids[0]].t;int8_t side=separator_side[root];vector<int> touched;int remaining=0;
+    ++epoch;hf.clear();int root=qs[ids[0]].t;int8_t side=separator_leaf[root];vector<int> touched;int remaining=0;
     for(int id:ids){int x=qs[id].s;if(head[x]==-1){touched.push_back(x);++remaining;}nextq[id]=head[x];head[x]=id;}
     setf(root,0);hf.push(0,root);
-    while(!hf.empty()&&remaining){auto[d,u]=hf.pop();if(d!=getf(u))continue;if(head[u]!=-1){for(int id=head[u];id!=-1;id=nextq[id])ans[id]=ans[id]<0?(int64_t)d:std::min(ans[id],(int64_t)d);head[u]=-1;--remaining;}for(int j=rv.off[u];j<rv.off[u+1];++j){Arc e=rv.edge[j];if(separator_side[e.to]!=side)continue;u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd,e.to);}}}
+    while(!hf.empty()&&remaining){auto[d,u]=hf.pop();if(d!=getf(u))continue;if(head[u]!=-1){for(int id=head[u];id!=-1;id=nextq[id])ans[id]=ans[id]<0?(int64_t)d:std::min(ans[id],(int64_t)d);head[u]=-1;--remaining;}for(int j=rv.off[u];j<rv.off[u+1];++j){Arc e=rv.edge[j];if(separator_leaf[e.to]!=side)continue;u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd,e.to);}}}
     for(int x:touched)head[x]=-1;
 }
 
@@ -251,8 +280,8 @@ static void run_queries(const char* qpath, const char* opath) {
     std::unordered_map<int,vector<int>> bys, byt; bys.reserve(Q/2); byt.reserve(Q/2);
     for(int i=0;i<Q;++i){ int s=(int)in.integer(),t=(int)in.integer(); qs[i]={s,t}; if(s==t) ans[i]=0; else {bys[s].push_back(i);byt[t].push_back(i);} }
     if(!gx.empty()&&double(Q)/V>=5.0){
-        build_separator();vector<uint8_t> handled(Q);for(int i=0;i<Q;++i)if(ans[i]<0){u64 z=separator_answer(qs[i].s,qs[i].t);ans[i]=z==INF?-1:(int64_t)z;if(separator_side[qs[i].s]!=separator_side[qs[i].t]||separator_side[qs[i].s]==0)handled[i]=1;}
-        for(auto& kv:byt){vector<int> neg,pos;for(int id:kv.second)if(!handled[id])((separator_side[qs[id].s]<0)?neg:pos).push_back(id);if(!neg.empty())grouped_side(neg);if(!pos.empty())grouped_side(pos);for(int id:kv.second)handled[id]=1;}
+        build_separator();vector<uint8_t> handled(Q);for(int i=0;i<Q;++i)if(ans[i]<0){int s=qs[i].s,t=qs[i].t;u64 z=separator_answer(s,t);if(separator_side[s]==separator_side[t]&&separator_side[s]!=0)z=std::min(z,subseparator_answer(s,t,separator_side[s]));if(separator_region[s]==separator_region[t]&&separator_region[s]!=0&&std::abs((int)separator_region[s])<=2)z=std::min(z,leafseparator_answer(s,t,separator_region[s]));ans[i]=z==INF?-1:(int64_t)z;if(separator_side[s]!=separator_side[t]||separator_side[s]==0||separator_region[s]!=separator_region[t]||std::abs((int)separator_region[s])==3||separator_leaf[s]!=separator_leaf[t]||separator_leaf[s]>=20)handled[i]=1;}
+        for(auto& kv:byt){std::array<vector<int>,8> part;for(int id:kv.second)if(!handled[id])part[separator_leaf[qs[id].s]-1].push_back(id);for(auto& ids:part)if(!ids.empty())grouped_side(ids);for(int id:kv.second)handled[id]=1;}
         FILE* out=std::fopen(opath,"wb");if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);}char buf[64];for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);}std::fclose(out);return;
     }
     double qpv=double(Q)/V,avgdeg=double(fw.edge.size())/V;
