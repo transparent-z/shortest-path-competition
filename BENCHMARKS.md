@@ -652,3 +652,51 @@ large margin and has no credible path to beat the ~76 s large ALT solver.  No
 large run, production integration, multi-level extension, or wide64 port is
 warranted.  The standalone engine and measurements are retained to prevent
 repeating this architecture.
+
+## Stage 3B: cross-side Monge plus explicit same-side rows (rejected)
+
+The standalone Stage-3 engine was changed exactly as proposed, without touching
+`solver.cpp`.  Each corner has one canonical clockwise side.  Every region now
+has 12 oriented cross-side views (the six unordered side pairs in both
+directions), while a settled boundary vertex scans only its exact dense row to
+other vertices on the same side.  The construction verifier counts every
+ordered boundary pair and aborts unless it is covered exactly once by either a
+cross-side view or a same-side block, with the exact dense distance.  All public
+and fresh-seed regions passed.
+
+On all 10,000 public `local2d_dev` queries, side 16 produced:
+
+| metric | recursive Stage 3 | cross-side Stage 3B | change |
+|---|---:|---:|---:|
+| matrices total | 23,128 (~118/region) | 2,352 (12/region) | 9.83x fewer |
+| preprocessing | 0.679 s | 0.559 s | 18% lower |
+| implicit total query time | 40.455 s | 30.168 s | 25% lower |
+| implicit global time | 39.369 s | 29.108 s | 26% lower |
+| row activations | 46,153,415 | 23,335,989 | 49% lower |
+| heap pushes | 110,045,162 | 82,031,574 | 25% lower |
+| stale pops | 88,774,574 | 61,361,135 | 31% lower |
+| matrix inspections | 297,187,233 | 225,503,203 | 24% lower |
+| boundary vertices settled | 7,778,653 | 7,778,663 | unchanged |
+
+Stage 3B additionally performed 109,160,461 tiny explicit same-side
+relaxations and 8,297,166 crossing-edge relaxations.  Its preprocessing split
+was 0.426 s boundary SSSPs, 0.014 s sorted indices, and 0.118 s other work; peak
+RSS fell to 28,416 KiB.  All 10,000 answers matched the official reference.
+
+The simplification attacks the diagnosed event explosion and is measurably
+better, but the pushes fell by only 25%, not an order of magnitude.  Twelve
+oriented cross-side views still create roughly 10.5 heap pushes per settled
+boundary vertex, and explicit same-side scanning adds another 109 million
+relaxations.  The dense reference took 8.250 s total / 7.245 s global, so the
+new implicit engine remains 3.66x slower overall and 4.02x slower in its global
+phase.  It is also about 12.5x slower than the paired ~2.4 s retained ALT run.
+
+Fresh-seed 1,000-query checks remained exact.  Seed 99173 measured 0.920 s
+dense versus 3.093 s implicit; seed 77191 measured 0.760 s versus 2.997 s.
+Thus the regression is structural rather than a public-weight accident.
+
+**Decision:** reject Stage 3B and stop DDG/Monge/FR research as directed.  It
+fails the mandatory condition that implicit global DDG beat dense DDG, so no
+wide64_dev port, block-width tuning, multilevel DDG, theoretical FR heap, or
+production integration is justified.  The production checkpoint remains
+unchanged.
