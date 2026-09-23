@@ -542,3 +542,50 @@ zero violations in 0.473 s.  Stage 1 therefore passes for the exact interval
 representation intended by the DDG.  The verifier intentionally remains
 outside `solver.cpp`; Stage 2 must prove a dynamic Monge minimum primitive
 against brute force before any production integration.
+
+## Stage 2: dynamic interval-matrix minimum primitive
+
+The standalone `tools/monge_heap_experiment.cpp` implements and tests the
+required dynamic API without touching `solver.cpp`.  It uses a practical
+blocked lazy structure: columns are split into sqrt-width ranges; each
+row/range stores columns ordered by `(M[r][c], c)`; activating a row inserts one
+winner per range; finalized winners advance lazily only when they reach the
+global heap top.  Thus activation creates O(sqrt(C)) heap entries rather than
+scanning C columns, and no row-column pair becomes a heap item.  Static sorted
+indices cost O(R*C) integers, a tradeoff to measure during one-level DDG work.
+All keys, bases, and matrix values are uint64.  Saturating addition and an
+explicit disconnected-matrix test normalize unreachable results to
+`(INF,-1,-1)`.
+
+The harness builds the same six correctly oriented interval-pair matrices per
+real planar region as Stage 1.  A dense reference is checked after every row
+activation and every column finalization, including deterministic
+`(value,column,row)` tie breaking.  Row order and base labels are randomized;
+alternating trials use randomized column removal or Dijkstra-like removal of
+the current minimum.
+
+Across public and two fresh-seed graphs, sides 8 and 16, the harness ran 11,520
+randomized sequences with zero mismatches.  Representative public results
+(eight regions, 20 repetitions) were:
+
+| side | active rows | sequences | optimized inspections | dense inspections | reduction |
+|---:|---:|---:|---:|---:|---:|
+| 8 | 25% | 960 | 35,925 | 39,040 | 1.09x |
+| 8 | 50% | 960 | 42,633 | 111,200 | 2.61x |
+| 8 | 100% | 960 | 56,133 | 330,400 | 5.89x |
+| 16 | 25% | 960 | 234,713 | 442,080 | 1.88x |
+| 16 | 50% | 960 | 253,972 | 1,152,800 | 4.54x |
+| 16 | 100% | 960 | 292,506 | 3,242,400 | 11.08x |
+
+The public side-16 run sustained 49,353 activations/s and 211,380 extract
+calls/s in 0.515 s at 28,800 KiB peak RSS.  Fresh-seed side-16 reductions were
+1.81--1.84x at 25%, 4.38--4.43x at 50%, and 10.75--10.86x at 100%, again with
+zero mismatches.  The low-occupancy case shows that static ordering cost is not
+free, but activation is sublinear and the relevant half/full activation cases
+clear the requested 3x work-reduction signal with improving scaling.
+
+**Decision:** Stage 2 passes correctness and practical-scaling gates.  The
+primitive is suitable for a Stage 3 one-level DDG experiment, where the main
+remaining risk is whether enough rows become active to amortize sorted-index
+preprocessing.  It remains standalone; the certified production solver is
+unchanged.
