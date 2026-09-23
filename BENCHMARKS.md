@@ -354,3 +354,88 @@ reduction; multilevel flags add rather than remove boundary preprocessing.
 Thus conventional exact Arc Flags cannot amortize here, while the cheap
 multi-source approximation would violate exactness.  The family is rejected
 before a large run under the explicit preprocessing rejection rule.
+
+## Road-backbone partial metric CH design
+
+The road-specific candidate identifies fast horizontal and vertical lines from
+observable per-line mean lattice-edge weights (rather than assuming a manifest
+stride).  Their union remains as an exact directed core; only local-street
+interiors bounded by consecutive fast lines are contracted.  For each directed
+predecessor/successor pair through a contracted vertex, a batched bounded
+witness search excludes that vertex.  Budget exhaustion inserts the shortcut,
+so correctness never depends on witness success.
+
+Separate upward-forward and upward-reverse arcs preserve asymmetric weights.
+Queries search upward from both endpoints and then run an unrestricted exact
+directed Dijkstra in the retained arterial/highway core.  This differs from the
+failed torus hierarchy because contraction stops at the generator's observed
+fast-road backbone and local witness searches operate on small street cells.
+Measurements will include detected core fraction, candidates/suppression,
+shortcuts, packed arc counts, preprocessing, query time, RSS, and exactness.
+
+### Directed road-backbone partial CH results
+
+The road-specific prototype detected arterial/highway rows and columns from
+per-line mean edge weights, retained their union as the core, and contracted
+only local-street interiors.  Directed predecessor/successor witnesses used a
+64-settlement budget; upward forward/reverse shortcuts and an unrestricted
+exact directed core search preserved asymmetry and correctness.
+
+On road2d_dev it retained 11,760 core vertices (23.44%), contracted 38,416,
+considered 3,633,810 candidates, suppressed 2,994,558 (82.41%), and inserted
+639,252 shortcuts.  The result had 757,849 upward arcs and 84,695 core arcs.
+It matched all 10,000 answers, used 77 MB peak RSS, but preprocessing/self-query
+time was 6.917 s and total time was 10.546 s versus 4.029 s paired SAFE.
+Preprocessing alone exceeds the current complete solver, and large uses a
+narrower arterial spacing fraction with six times as many vertices, so it
+cannot plausibly reach the required <50 s target.  The candidate is rejected
+before a large run under the stated rule.  This directly tests—and rejects—the
+hypothesis that the structured fast-road backbone makes witness contraction
+cheap enough, rather than extrapolating from the torus result.
+
+## Scale-free low-degree contraction/core design
+
+The scale-free candidate retains the highest observed in-degree vertices as an
+exact directed core and contracts the remaining vertices in increasing static
+`in-degree * out-degree` importance.  Directed batched witnesses suppress
+predecessor/successor shortcuts; separate forward/reverse upward arcs feed an
+unrestricted directed core search.  This is an exact partial contraction, not
+the previously rejected hub-route upper bound.
+
+### Scale-free low-degree/hub-core contraction results
+
+With a 50% high-in-degree core, the exact directed prototype contracted 25,000
+vertices, considered 101,503 shortcut candidates, suppressed only 5,423
+(5.34%), inserted 96,080 shortcuts, and produced 117,142 upward plus 124,459
+core arcs.  Preprocessing/self-query time was only 0.580 s at 30 MB RSS, but
+exact core queries raised total scalefree_dev time to 13.596 s versus 7.646 s
+SAFE.  All 10,000 answers matched.
+
+A more aggressive 20% core did not finish preprocessing within 125 s and was
+stopped: contracting vertices closer to the heavy in-degree core causes the
+predecessor-successor product and shortcut graph to explode.  Thus the shallow
+variant has cheap preprocessing but an expensive 25k core, while the deeper
+variant crosses the directed fill cliff.  Neither has credible 2x potential,
+and this exact hub-core contraction family is rejected without a large run.
+
+## 2-D grid r-division / DDG feasibility estimate
+
+For square regions of `r` vertices, each region has `b = Theta(sqrt(r))`
+boundary vertices.  Full boundary-distance matrices total
+`(V/r)*b^2 = Theta(V)` uint64 entries per level, while preprocessing by boundary
+SSSP costs `Theta(V*sqrt(r))` settles per level.  At r=256 this is roughly 4--5
+million distance entries (~35--40 MB) and ~20 million regional settles for
+local2d_large; wide64 is roughly 32 million entries (~256 MB) per level.
+
+Those storage/preprocessing figures are feasible, but naïvely exposing each
+matrix entry as an overlay arc recreates the already rejected dense CRP graph.
+A useful query requires an FR-Dijkstra-style data structure supporting activated
+rows and Monge column minima without scanning the boundary clique.  Boundary
+matrices for a weighted planar region have the needed cyclic Monge structure
+only after splitting boundary order into the appropriate face intervals; a
+plain binary heap or CSR does not exploit it.  With such a structure, projected
+long-query work is about `sqrt(V) polylog(V)` and is potentially serious for the
+10% long local2d tail and 30k wide64 queries.  Without it, 30k--300k queries
+scan billions of dense entries.  Therefore no forbidden explicit-clique
+prototype was built; the next implementation-worthy grid architecture is a
+correct Monge-heap/FR DDG, not another ordinary overlay.
