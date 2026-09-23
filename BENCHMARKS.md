@@ -816,3 +816,30 @@ every official answer.  This is a **2.04x workload improvement**.  The dispatch
 uses only Q/V and observed average degree; hugeq remains on its earlier
 high-Q/V separator path, scale-free does not meet Q/V, and undirected behavior
 is unchanged except for the already-targeted local2d lattice.
+
+## Dispatch audit: sparse-query wide64 ALT hypothesis
+
+The next audit revisits only the *dispatch gate*, not landmark-count tuning.
+`wide64` has Q/V below the existing 0.5 cutoff, but its individual high-rank
+queries are expensive and the large graph still has 30,000 queries.  The
+hypothesis is that the already-retained exact 12-landmark engine may amortize
+at a lower Q/V when edge weights are wide and query ranks are long.  Forced
+dev timing, including preprocessing, is the first rejection gate.
+
+### Sparse-query wide64 ALT result (retained)
+
+Forced 12-landmark ALT on `wide64_dev`, including preprocessing, improved from
+4.311 s to 1.146 s (3.76x) and was exact.  Fresh generator seed 117733 improved
+from 4.078 s to 1.226 s (3.33x), matching all 10,000 reference answers.
+
+On official `wide64_large`, the existing uint64 balanced-potential search took
+473.802 s on this runner.  Landmark ALT took **105.672 s**, including graph
+loading and all 12 full SSSPs, used 436.9 MiB peak RSS, and matched all 30,000
+64-bit reference answers.  This is a **4.48x workload improvement**, decisively
+reversing the earlier assumption that preprocessing could not amortize.
+
+The retained dispatch does not lower the general Q/V threshold.  It permits
+`Q/V >= 0.01` only when the graph has already passed the observable exact 2-D
+torus topology check (`lattice_side`), while keeping the low-degree and Q/V<5
+requirements.  This generalizes across seeds, excludes scale-free and 3-D
+lattice graphs structurally, and preserves uint64 distance arithmetic.

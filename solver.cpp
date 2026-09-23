@@ -309,7 +309,8 @@ static void run_queries(const char* qpath, const char* opath) {
         FILE* out=std::fopen(opath,"wb");if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);}char buf[64];for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);}std::fclose(out);return;
     }
     double qpv=double(Q)/V,avgdeg=double(fw.edge.size())/V;
-    if(qpv>=0.5&&qpv<5.0&&avgdeg<6.0)build_landmarks(12);
+    bool amortized_alt = qpv>=0.5 || (lattice_side && qpv>=0.01);
+    if(amortized_alt&&qpv<5.0&&avgdeg<6.0)build_landmarks(12);
     vector<uint8_t> done(Q,0);
     // Repeated targets are especially valuable on the scale-free hub workload.
     for(auto& kv:byt) if(kv.second.size()>=4){ grouped(kv.second,false); for(int id:kv.second)done[id]=1; }
