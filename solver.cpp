@@ -43,6 +43,7 @@ static CSR fw, rv;
 static vector<int> gx, gy;
 static int lattice_side = 0;
 static bool graph_directed = false;
+static bool balance_by_arc_work = false;
 static int minimum_weight = std::numeric_limits<int>::max();
 
 static CSR make_csr(const vector<std::array<int, 3>>& es, bool reverse) {
@@ -87,6 +88,15 @@ static void read_graph(const char* path) {
         }
     }
     fw = make_csr(es, false); rv = make_csr(es, true);
+    if (directed) {
+        int maximum_reverse_degree = 0;
+        for (int v = 0; v < V; ++v)
+            maximum_reverse_degree = std::max(maximum_reverse_degree,
+                                               rv.off[v + 1] - rv.off[v]);
+        // Power-law directed graphs expose very large reverse frontiers;
+        // geometric road graphs have uniformly small local degrees.
+        balance_by_arc_work = maximum_reverse_degree >= 64;
+    }
 }
 
 static inline int msb(u64 x) { return x ? 64 - __builtin_clzll(x) : 0; }
@@ -122,18 +132,24 @@ static inline void setb(int x, u64 d) { sb[x] = epoch; db[x] = d; }
 static int64_t plain_bidijkstra(int s, int t) {
     if (s == t) return 0;
     ++epoch; hf.clear(); hb.clear(); setf(s,0); setb(t,0); hf.push(0,s); hb.push(0,t);
-    u64 best = INF;
+    u64 best = INF, forward_work = 0, backward_work = 0;
     while (!hf.empty() && !hb.empty()) {
         u64 af = hf.min_key(), ab = hb.min_key();
         if (af + ab >= best) break;
-        if (af <= ab) {
+        // Either frontier may be advanced without changing the standard
+        // min-key termination proof.  Balancing relaxed arcs rather than key
+        // radii avoids repeatedly expanding a high-in-degree reverse hub in
+        // directed power-law graphs.
+        if (balance_by_arc_work ? forward_work <= backward_work : af <= ab) {
             auto [d,u] = hf.pop(); if (d != getf(u)) continue;
+            forward_work += fw.off[u + 1] - fw.off[u];
             u64 od = getb(u); if (od != INF && d + od < best) best = d + od;
             for (int j=fw.off[u]; j<fw.off[u+1]; ++j) { Arc e=fw.edge[j]; u64 nd=d+(uint32_t)e.w;
                 if (nd < getf(e.to)) { setf(e.to,nd); hf.push(nd,e.to); u64 z=getb(e.to); if(z!=INF && nd+z<best) best=nd+z; }
             }
         } else {
             auto [d,u] = hb.pop(); if (d != getb(u)) continue;
+            backward_work += rv.off[u + 1] - rv.off[u];
             u64 od = getf(u); if (od != INF && d + od < best) best = d + od;
             for (int j=rv.off[u]; j<rv.off[u+1]; ++j) { Arc e=rv.edge[j]; u64 nd=d+(uint32_t)e.w;
                 if (nd < getb(e.to)) { setb(e.to,nd); hb.push(nd,e.to); u64 z=getf(e.to); if(z!=INF && nd+z<best) best=nd+z; }

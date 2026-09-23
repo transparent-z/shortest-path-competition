@@ -700,3 +700,59 @@ fails the mandatory condition that implicit global DDG beat dense DDG, so no
 wide64_dev port, block-width tuning, multilevel DDG, theoretical FR heap, or
 production integration is justified.  The production checkpoint remains
 unchanged.
+
+## Autonomous profiling phase: frontier-work-balanced bidirectional search
+
+Profiling focused on directed scale-free search after rejecting DDG.  Two cheap
+offline alternatives were screened first.  Lowering reverse target grouping
+from frequency 4 to 3 or 2 was exact but regressed `scalefree_dev` from 7.988 s
+to 8.470 s and 13.463 s respectively.  Replacing bidirectional search with
+forward-only Dijkstra was also exact but regressed from 7.502 s to 16.692 s.
+Both are rejected.
+
+The decisive observation was that the existing bidirectional search selected a
+frontier solely by its minimum distance key.  On a directed power-law graph,
+the reverse frontier can then repeatedly settle enormous-in-degree hubs and
+relax far more arcs than the forward frontier.  Bidirectional Dijkstra's exact
+termination condition depends on the two minimum keys, but correctness does
+not require expanding the smaller-key side.  The retained change selects the
+side with fewer cumulative outgoing arcs relaxed, while preserving the same
+`min_forward + min_backward >= best` termination test.
+
+This reduced paired `scalefree_dev` time from 8.047 s to 0.925 s (8.70x) while
+remaining exact.  On a fresh generator seed (662211), it reduced 7.876 s to
+0.857 s (9.19x), again matching all 10,000 reference answers.  It also reduced
+`road2d_dev` from 4.396 s to 3.816 s; symmetric regular graphs naturally keep
+both work counters close, so other dev families retain their behavior.
+
+The official `scalefree_large` targeted comparison, including graph loading
+and all preprocessing, was exact for all 50,000 queries:
+
+| candidate | solver time | peak RSS | correctness |
+|---|---:|---:|---|
+| certified key-balanced SAFE | 339.340 s | 61.8 MiB | exact |
+| arc-work-balanced bidirectional | **24.726 s** | **48.6 MiB** | exact |
+
+This is a **13.72x workload improvement** from a small, generally valid change,
+and is the new production candidate.  Target grouping remains at the proven
+frequency-four threshold.  All six development answer sets match exactly.
+
+### Structural dispatch and regression diagnosis
+
+A first full-suite attempt showed that unconditional arc-work balancing is
+wrong for the road family: the long road2d queries progressed poorly and the
+run was interrupted rather than wasting a full certification cycle.  This did
+not affect the power-law result, but required observable structural dispatch.
+The distinction is strong and seed-independent: public/fresh road graphs have
+maximum reverse degree 8 (average about 5.4), while scale-free dev/large have
+maximum reverse degrees 2,173/14,427 (average about 2.91).
+
+The production candidate therefore enables work balancing only on directed
+graphs whose observed maximum reverse degree is at least 64.  Low-degree road
+and all undirected families retain the certified minimum-key frontier policy.
+After this correction `road2d_dev` was exact at 4.122 s and
+`scalefree_dev` remained exact at 0.850 s.  A targeted road2d_large run was
+exact at 356.303 s on this slower runner; because its maximum reverse degree is
+8, its search code is byte-for-byte the old key-selection path.  The timing is
+not comparable to the previously reported faster-machine certification and is
+recorded only as an exact regression check.
