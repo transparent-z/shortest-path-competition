@@ -501,3 +501,44 @@ for the exact cyclic boundary ordering before applying Monge operations.  This
 is a substantially different data structure rather than another separator or
 CH tuning exercise; it is the next research target, but no unvalidated FR code
 has been placed in the production solver.
+
+## Stage 0: bounded-integer search engine (rejected)
+
+A circular Dial queue was prototyped for undirected ALT.  Consistency makes
+A* keys monotone and bounds a relaxation's key increase by twice the maximum
+edge weight, so a `2*max_weight+1` circular window is sufficient.  With the
+same forced 12-landmark preprocessing and all 10,000 `local2d_dev` queries,
+the radix version took 2.605 s and Dial took 2.559 s (both 9.5 MiB and exact).
+The 1.8% difference is far below the 20% continuation threshold.
+
+A second exact prototype seeded ALT with the cheapest of eight explicit torus
+Manhattan routes (both axis orders and both wrap directions), then pruned states
+whose admissible lower bound reached that incumbent.  It was exact but took
+2.820 s versus 2.675 s for paired ordinary radix ALT: route construction and
+edge lookup cost more than the modest pruning saved.  Consequently bucket
+Dijkstra, bucket ALT, and route-upper-bound tuning are rejected; none was added
+to the production solver.  Wide64 remains on its uint64 radix path.
+
+## Stage 1: planar-region Monge validation
+
+`tools/verify_grid_monge.py` is a standalone verifier for the mathematical
+precondition of an implicit DDG.  It recognizes an undirected square row-major
+grid, cuts complete square regions without wrap edges, enumerates each region's
+boundary clockwise as four non-overlapping intervals, computes exact internal
+boundary distances, reverses the second interval to obtain the non-crossing
+cyclic order, and exhaustively checks every adjacent 2x2 Monge minor.  This
+keeps the non-planar torus wrap edges outside the child regions as required.
+
+Results for 16x16 regions:
+
+| graph | regions | boundary entries | interval matrices | inequalities | violations | time | peak RSS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| public `local2d_dev` sample (20 regions) | 20 | 1,200 | 120 | 23,500 | 0 | 0.869 s | 39,752 KiB |
+| fresh seed 99173 | 196 | 11,760 | 1,176 | 230,300 | 0 | 5.993 s | 39,760 KiB |
+| fresh seed 77191 | 196 | 11,760 | 1,176 | 230,300 | 0 | 5.960 s | 39,764 KiB |
+
+A separate 8x8 run over 50 public regions checked 10,750 inequalities with
+zero violations in 0.473 s.  Stage 1 therefore passes for the exact interval
+representation intended by the DDG.  The verifier intentionally remains
+outside `solver.cpp`; Stage 2 must prove a dynamic Monge minimum primitive
+against brute force before any production integration.
