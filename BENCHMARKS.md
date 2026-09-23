@@ -589,3 +589,66 @@ primitive is suitable for a Stage 3 one-level DDG experiment, where the main
 remaining risk is whether enough rows become active to amortize sorted-index
 preprocessing.  It remains standalone; the certified production solver is
 unchanged.
+
+## Stage 3: one-level implicit DDG (rejected)
+
+`tools/ddg_experiment.cpp` is a standalone one-level engine; `solver.cpp` is
+unchanged.  It partitions the observed square row-major grid into open planar
+tiles, retains torus and tile-crossing edges explicitly, computes exact
+within-tile boundary distances, and provides both a dense-row Dijkstra and an
+implicit blocked-matrix Dijkstra.  Per-query matrix heaps are created only when
+touched and use epoch-based global vertex state.
+
+The six side-pair matrices from Stage 1 do not cover pairs on the same side.
+Stage 3 therefore recursively bisects the complete cyclic boundary.  At every
+split it stores both oriented left/right interval matrices, then recurses on
+both halves.  A mechanical coverage check proves that every ordered,
+off-diagonal boundary pair occurs exactly once and that its recovered value is
+the dense exact value.  Construction aborts on a missing, duplicate, or
+unreachable covered pair; all tested regions passed.
+
+### Public `local2d_dev`, all 10,000 queries
+
+| side | boundary vertices | matrices | preprocessing | dense query | implicit query | implicit/dense result |
+|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 11,760 | 23,128 | 0.679 s | 8.561 s | 40.455 s | 0.21x (4.73x slower) |
+| 8 | 21,952 | 42,336 | 0.421 s | 9.891 s | 54.667 s | 0.18x (5.53x slower) |
+
+Both engines matched every official development answer.  For side 16,
+preprocessing comprised 0.459 s boundary SSSPs, 0.020 s sorted indices, and
+0.200 s other construction/coverage work.  Dense endpoint searches consumed
+0.999 s and its global DDG 7.562 s; implicit endpoint searches consumed 1.086 s
+and its global engine 39.369 s.  Peak RSS was 39,252 KiB.  Paired forced-ALT
+runs took 2.486 s and 2.371 s including its landmark preprocessing, so even the
+explicit DDG was about 3.5x slower than retained ALT and the implicit engine
+about 16.7x slower.
+
+The side-16 implicit instrumentation recorded 7,778,653 settled boundary
+vertices, 15,714,275 touched matrices, 46,153,415 row activations, 110,045,162
+matrix heap pushes, 88,774,574 stale pops, 297,187,233 matrix-entry inspections,
+and 8,297,156 explicit crossing-edge relaxations.  Occupancy was unexpectedly
+high: 15,006,585 touched matrices (95.5%) were in the 75--100% bucket, accounting
+for 467,873,236 of 496,006,969 recorded matrix-work operations (about 94%).
+Thus the Stage-2 structure *does* amortize at real occupancy, but decomposing a
+boundary into 118 small oriented matrices creates overwhelming heap/event
+constant factors.  The experiment answers the key occupancy question without
+confounding it with low row utilization.
+
+Two fresh-seed side-16 full validations also matched all 10,000 independently
+computed reference answers.  Seed 99173 measured 8.215 s dense and 38.993 s
+implicit; seed 77191 measured 7.956 s dense and 40.335 s implicit.  Their
+occupancy distributions and roughly 111 million pushes were consistent with
+the public graph.
+
+A torus-Manhattan split (`distance <= 32`) found 7,527 short and 2,473 long
+queries.  On 1,000-query samples, implicit versus dense was 0.36x for short
+queries (0.627 versus 0.228 s) and 0.21x for long queries (14.484 versus 3.059
+s).  There is therefore no observable locality threshold at which this
+implicit implementation becomes a useful hybrid.
+
+**Decision:** Stage 3 is rejected.  It is exact and real matrices have the high
+occupancy Stage 2 wanted, but it fails the required engine-speed criterion by a
+large margin and has no credible path to beat the ~76 s large ALT solver.  No
+large run, production integration, multi-level extension, or wide64 port is
+warranted.  The standalone engine and measurements are retained to prevent
+repeating this architecture.
