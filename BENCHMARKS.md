@@ -202,3 +202,54 @@ runtime.  Although query answers on the completed dev hierarchy were exact,
 generic minimum-degree elimination does not scale to the 300k/2M grids.  A
 leaderboard-scale grid CH needs an implicit nested-dissection representation or
 witness-suppressed shortcuts, not per-vertex unordered-map clique closure.
+
+## CCH design: topology-first nested dissection
+
+The next candidate is a true customizable contraction hierarchy for observable
+chord-free 2-D torus topology.
+
+* **Ordering:** open the torus with two separator rows and two separator
+  columns, recursively nested-disect the four resulting rectangles, and order
+  each separator line by 1-D nested dissection.  The order depends only on
+  topology/row-major coordinates, never weights or a seed.
+* **Compact elimination topology:** store higher-ranked neighbors as flat
+  integer lists.  At elimination vertex `x`, sort/unique its higher neighbors,
+  choose the lowest-ranked neighbor as elimination parent, and propagate the
+  remaining neighbors to that parent.  This constructs the chordal completion
+  without a hash map per vertex or eager all-pairs shortcut objects.
+* **Customization:** initialize each hierarchy edge with separate low-to-high
+  and high-to-low uint64 weights, then relax all lower triangles in rank order.
+  Separate directions make the same representation reusable for directed road
+  metrics later.
+* **Query:** exact bidirectional upward search uses low-to-high customized
+  weights forward and high-to-low weights backward, meeting at a common rank.
+* **Memory:** O(V + E_chordal), with two uint64 weights plus one 32-bit head per
+  hierarchy arc after CSR packing.  Arc count and estimated bytes are measured
+  on dev before any 2M-vertex wide64 attempt.
+
+This differs fundamentally from the rejected minimum-degree CH: ordering is an
+explicit separator hierarchy, topology construction uses elimination-parent
+propagation in compact vectors, and metric weights are customized only after
+the topology is complete.  It avoids per-vertex unordered maps and online
+weighted clique closure.
+
+### Compact nested-dissection CCH prototype results
+
+The designed CCH was implemented and was exact on all 10,000 local2d_dev
+queries.  Elimination-parent propagation avoided per-vertex hash maps and the
+packed hierarchy used separate uint64 forward/backward weights.  Profiling
+showed 2,248,478 upward arcs for 50,176 vertices (about 54 MB packed, roughly
+45 arcs/vertex).  Opening the torus with one boundary row/column versus a
+balanced double-cross separator produced essentially the same fill (2,260,786
+arcs), identifying recursive separator fronts—not torus opening—as the source.
+
+End-to-end dev time was 8.597 s, including about 4.821 s preprocessing, versus
+roughly 2--3 s for the retained search.  More importantly, topology construction
+plus lower-triangle customization on local2d_large took 127.116 s even with
+self queries, already exceeding the complete ~74 s ALT checkpoint before any
+real query.  Extrapolated fill is tens of millions of arcs and customization's
+sum-of-squared upward degrees is the bottleneck, not packed storage itself.
+The full CCH is therefore rejected for these query counts.  A viable successor
+must be a **partial** hierarchy that stops before large separator fronts and
+runs an exact compact core search, or use witness-suppressed metric shortcuts;
+merely changing the top torus cut does not address the measured fill.
