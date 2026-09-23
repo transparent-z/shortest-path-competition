@@ -297,3 +297,60 @@ that exact clique shortcuts at separator fronts remain the architectural
 barrier even when half the graph is left uncontracted.  Future hierarchy work
 must use metric witness suppression or a boundary representation that avoids
 these shortcuts; changing only the core fraction cannot yield a 2x gain.
+
+## Metric partial CH with batched witness searches — design
+
+The next partial hierarchy keeps the exact-core query architecture but replaces
+unconditional clique closure with metric witness suppression.  Vertices follow
+a topology-only nested-dissection order and contraction stops with a moderate
+core.  For each contracted vertex `v`, one bounded Dijkstra is run per active
+neighbor `u`, excluding `v`; the search simultaneously resolves every
+`u-v-w` candidate and stops beyond the largest candidate weight.  Unresolved
+pairs after a settlement budget conservatively receive shortcuts, preserving
+exactness.
+
+Experimental construction uses append-only adjacency vectors with inactive
+vertices filtered during scans and periodic per-vertex sort/min deduplication;
+it does not allocate an unordered map per vertex.  The retained candidate will
+pack upward and core arcs before queries.  Measurements include shortcut
+candidates, witness-suppressed candidates, inserted shortcuts, preprocessing,
+core size/arcs, query time, total time, and RSS.
+
+### Witness-suppressed partial metric CH results
+
+A batched exact witness implementation contracted the nested-dissection prefix
+while retaining a 50% exact core.  Each active predecessor ran one bounded
+Dijkstra excluding the contracted vertex and answered all successor candidates;
+search-budget exhaustion conservatively inserted shortcuts.
+
+| witness settlement cap | core | candidates | suppressed | suppression | inserted | upward arcs | core arcs | preprocessing | peak RSS | full dev | correct |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 256 | 25,088 | 24,350,931 | 23,011,981 | 94.50% | 1,338,950 | 449,098 | 216,014 | 66.833 s | 92 MB | 72.394 s | yes |
+| 32 | 25,088 | 40,528,951 | 37,985,963 | 93.72% | 2,542,988 | 580,033 | 267,344 | 45.407 s | 150 MB | not pursued | construction exact |
+
+Witnesses do suppress most individual candidates and roughly halve the upward
+arc count versus conservative closure, validating the hypothesis at the graph
+level.  Nevertheless, tens of millions of bounded searches make preprocessing
+22--29x slower than the retained complete dev solver.  A smaller witness budget
+creates more shortcuts, which creates still more later candidate pairs and
+higher memory.  Preprocessing alone decisively violates the rejection rule, so
+no large run or core-fraction sweep is justified.  Metric witness CH is rejected
+for this workload and the next mandated family is exact multilevel Arc Flags.
+
+### Exact Arc Flags feasibility probe
+
+Classical exact region Arc Flags require preserving a shortest path to every
+possible entry boundary vertex (or equivalently substantially more expensive
+per-target preprocessing); a single multi-source nearest-boundary Dijkstra is
+not exact for an arbitrary target inside the region.  On the 224x224 dev torus
+with 16x16 cells there are 11,760 boundary vertices.  Running only 128 reverse
+SSSP boundary probes took 0.825 s total including load, implying roughly 75 s
+for one exact flag level on the tiny dev graph before flag propagation or any
+queries.  The corresponding 548x548 large grid has tens of thousands of
+boundaries and each SSSP is six times larger.  Larger cells reduce preprocessing
+only by making target-region flags too coarse to offer the required 2x query
+reduction; multilevel flags add rather than remove boundary preprocessing.
+
+Thus conventional exact Arc Flags cannot amortize here, while the cheap
+multi-source approximation would violate exactness.  The family is rejected
+before a large run under the explicit preprocessing rejection rule.
