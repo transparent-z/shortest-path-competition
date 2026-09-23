@@ -253,3 +253,47 @@ The full CCH is therefore rejected for these query counts.  A viable successor
 must be a **partial** hierarchy that stops before large separator fronts and
 runs an exact compact core search, or use witness-suppressed metric shortcuts;
 merely changing the top torus cut does not address the measured fill.
+
+## Partial hierarchy + exact core design
+
+The partial candidate retains the same observable 2-D torus nested-dissection
+order, but contracts only an initial low-rank prefix.  Contraction stops before
+the high-degree separator fronts.  During experimental construction, active
+undirected edges carry exact uint64 shortcut weights; only contracted vertices
+are clique-closed, after which both upward shortcuts and the remaining core are
+packed into flat adjacency arrays.
+
+An exact query consists of two upward searches from the endpoints.  Any path
+whose rank peak is contracted is covered by their meeting distance.  Distances
+that reach the uncontracted core seed an exact core Dijkstra, which is combined
+with all reverse upward labels.  Consequently the core is a correctness
+fallback rather than a heuristic.  Core fractions of roughly 50%, 20%, 10%,
+and 5% form materially different points on the preprocessing/fill versus core
+search tradeoff; only candidates surviving dev correctness and timing proceed
+to the 300k-query workload.
+
+### Partial hierarchy/core tradeoff
+
+An exact partial hierarchy was implemented with nested-dissection prefix
+contraction, uint64 clique shortcuts only for contracted interiors, packed
+upward arcs, and an unrestricted exact Dijkstra on the retained core.  All four
+structurally distinct core fractions matched all 10,000 local2d_dev answers.
+
+| core fraction | core vertices | upward arcs | directed core arcs | preprocessing/self-query time | peak RSS | full dev time | decision |
+|---:|---:|---:|---:|---:|---:|---:|---|
+| 50% | 25,088 | 1,024,572 | 413,084 | 4.050 s | 79 MB | 14.743 s | reject |
+| 20% | 10,035 | 1,589,442 | 537,120 | 6.463 s | 104 MB | 18.811 s | reject |
+| 10% | 5,017 | 1,753,978 | 589,886 | 6.217 s | 111 MB | 18.826 s | reject |
+| 5% | 2,508 | 1,836,104 | 617,724 | 6.297 s | 115 MB | 19.354 s | reject |
+
+The paired retained dev solver is roughly 2--3 s.  The shallowest 50% core has
+the best total: deeper contraction reduces core size but adds enough upward and
+core shortcuts to make both preprocessing and queries worse.  Even the 50%
+point is about six times slower on dev, so none survives screening for a costly
+300k-query large run.  A short-query/ALT hybrid cannot repair this: preprocessing
+alone exceeds the retained dev total, while the hierarchy would serve only the
+10% long-range tail.  This properly explores the requested tradeoff and shows
+that exact clique shortcuts at separator fronts remain the architectural
+barrier even when half the graph is left uncontracted.  Future hierarchy work
+must use metric witness suppression or a boundary representation that avoids
+these shortcuts; changing only the core fraction cannot yield a 2x gain.
