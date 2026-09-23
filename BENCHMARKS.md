@@ -439,3 +439,65 @@ long-query work is about `sqrt(V) polylog(V)` and is potentially serious for the
 scan billions of dense entries.  Therefore no forbidden explicit-clique
 prototype was built; the next implementation-worthy grid architecture is a
 correct Monge-heap/FR DDG, not another ordinary overlay.
+
+## Coarse pattern-database A* design
+
+For observable row-major 2-D torus topology, vertices are mapped to regular
+blocks.  Each directed coarse edge stores the minimum original crossing-edge
+weight.  Sparse all-pairs coarse distances are computed by one radix-heap
+Dijkstra per block.  The lookup `D(block(v), block(t))` is admissible and
+consistent: every original path induces a coarse path whose crossing minima do
+not exceed its real crossing costs, while movement inside a block is optimistically
+free.  The maximum of several shifted/scaled consistent abstractions remains
+consistent.
+
+The first experiment compares exactly four material configurations: one 16x16
+partition, one 8x8 partition, four half-block-shifted 16x16 partitions, and a
+max of unshifted 8x8 plus 16x16.  Tables use uint64 and sparse preprocessing;
+settled work and total time determine whether the family merits road/wide64
+adaptation.  No filename, seed, or released-instance identity enters mapping.
+
+### Coarse PDB experiment results (rejected)
+
+The design above was implemented as an isolated candidate and compared on
+`local2d_dev` before any large run.  All four candidates returned exactly the
+10,000 reference distances.  The measurements below include graph loading,
+abstract-graph construction, all-pairs abstract Dijkstra, queries, and output.
+The `settled/query` counter counts original vertices removed from the A* queue.
+
+| abstraction | total (s) | preprocessing-only proxy (s) | peak RSS | settled/query | exact |
+|---|---:|---:|---:|---:|---|
+| one 16x16 partition | 6.130 | 0.091 | 8.4 MiB | 3275.55 | yes |
+| one 8x8 partition | 6.031 | 0.195 | 12.7 MiB | 3175.41 | yes |
+| four shifted 16x16 partitions | 12.768 | 0.115 | 9.0 MiB | 3259.80 | yes |
+| max of unshifted 8x8 and 16x16 | 7.656 | 0.194 | 13.0 MiB | 3175.41 | yes |
+
+The retained solver took 2.245 s and 2.372 s in paired runs on the same input.
+Thus even the best abstraction was about 2.6x slower, rather than the required
+2x improvement.  Finer blocks only reduced settling by 3.1%; the 16x16 table
+was completely dominated by the 8x8 table in the two-scale maximum, and shifts
+added lookup work without useful pruning.  The underlying reason is structural:
+collapsing a block makes all travel inside it free, while choosing the minimum
+crossing edge independently at every boundary creates unrealistically cheap
+abstract walks on a random-weight torus.  The resulting lower bound is much
+weaker than the retained landmark bounds despite its inexpensive construction.
+
+**Decision:** reject coarse block PDBs, including additional block-size tuning.
+The primary family missed the dev threshold decisively, so no costly large run
+and no road2d/wide64 port were performed.  The experimental implementation was
+removed; the exact three-level hugeq separator, 12-landmark local2d path, and
+safe fallbacks remain unchanged.
+
+### Next exact-grid architecture after the PDB result
+
+The remaining plausible grid direction is an implicit dense-distance graph for
+an r-division.  The earlier storage estimate rules out explicit boundary
+cliques.  A viable implementation therefore requires ordered boundary distance
+matrices together with a genuine Monge/SMAWK or FR-style heap representation;
+merely replacing the clique by a flat array does not change the asymptotics.
+On the weighted torus, regions must first be opened along wrap edges, with those
+edges retained at the parent level, and every boundary matrix must be verified
+for the exact cyclic boundary ordering before applying Monge operations.  This
+is a substantially different data structure rather than another separator or
+CH tuning exercise; it is the next research target, but no unvalidated FR code
+has been placed in the production solver.
