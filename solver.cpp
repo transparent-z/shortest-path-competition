@@ -194,11 +194,14 @@ static vector<Query> qs;
 static vector<int64_t> ans;
 static vector<int> head, nextq;
 static vector<u64> from_landmark, to_landmark;
+static vector<u64> landmark_heuristic_cache;
+static vector<uint32_t> landmark_heuristic_stamp;
 static int landmark_count=0;
 static vector<u64> full_sssp(int root,const CSR& g);
 
 static void build_landmarks(int count){
     landmark_count=count;from_landmark.reserve((size_t)count*V);if(graph_directed)to_landmark.reserve((size_t)count*V);
+    landmark_heuristic_cache.resize(V); landmark_heuristic_stamp.assign(V,0);
     int root=0;for(int v=1;v<V;++v)if(fw.off[v+1]-fw.off[v]+rv.off[v+1]-rv.off[v]>fw.off[root+1]-fw.off[root]+rv.off[root+1]-rv.off[root])root=v;
     vector<u64> nearest(V,INF);
     for(int k=0;k<count;++k){auto a=full_sssp(root,fw);auto b=graph_directed?full_sssp(root,rv):vector<u64>();from_landmark.insert(from_landmark.end(),a.begin(),a.end());if(graph_directed)to_landmark.insert(to_landmark.end(),b.begin(),b.end());u64 far=0;int next=root;for(int v=0;v<V;++v){u64 sep=a[v];if(graph_directed&&b[v]!=INF)sep=sep==INF?b[v]:std::min(sep,b[v]);nearest[v]=std::min(nearest[v],sep);if(nearest[v]!=INF&&nearest[v]>far){far=nearest[v];next=v;}}root=next;}
@@ -206,7 +209,12 @@ static void build_landmarks(int count){
 
 static inline u64 alt_h(int v,int t){u64 h=0;for(int k=0;k<landmark_count;++k){size_t z=(size_t)k*V;u64 lv=from_landmark[z+v],lt=from_landmark[z+t];if(lv!=INF&&lt!=INF&&lt>lv)h=std::max(h,lt-lv);if(graph_directed){u64 vl=to_landmark[z+v],tl=to_landmark[z+t];if(vl!=INF&&tl!=INF&&vl>tl)h=std::max(h,vl-tl);}else if(lv!=INF&&lt!=INF&&lv>lt)h=std::max(h,lv-lt);}return h;}
 
-static int64_t alt_astar(int s,int t){if(s==t)return 0;++epoch;hf.clear();setf(s,0);hf.push(alt_h(s,t),s);while(!hf.empty()){auto[key,u]=hf.pop();u64 d=getf(u);if(key!=d+alt_h(u,t))continue;if(u==t)return (int64_t)d;for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+alt_h(e.to,t),e.to);}}}return -1;}
+static inline u64 cached_alt_h(int v,int t){
+    if(landmark_heuristic_stamp[v]!=epoch){landmark_heuristic_stamp[v]=epoch;landmark_heuristic_cache[v]=alt_h(v,t);}
+    return landmark_heuristic_cache[v];
+}
+
+static int64_t alt_astar(int s,int t){if(s==t)return 0;++epoch;hf.clear();setf(s,0);hf.push(cached_alt_h(s,t),s);while(!hf.empty()){auto[key,u]=hf.pop();u64 d=getf(u);if(key!=d+cached_alt_h(u,t))continue;if(u==t)return (int64_t)d;for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+cached_alt_h(e.to,t),e.to);}}}return -1;}
 static vector<int8_t> separator_side;
 static vector<int8_t> separator_region;
 static vector<int8_t> separator_leaf;
@@ -301,7 +309,7 @@ static void run_queries(const char* qpath, const char* opath) {
         FILE* out=std::fopen(opath,"wb");if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);}char buf[64];for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);}std::fclose(out);return;
     }
     double qpv=double(Q)/V,avgdeg=double(fw.edge.size())/V;
-    if(qpv>=0.5&&qpv<5.0&&avgdeg<5.0)build_landmarks(12);
+    if(qpv>=0.5&&qpv<5.0&&avgdeg<6.0)build_landmarks(12);
     vector<uint8_t> done(Q,0);
     // Repeated targets are especially valuable on the scale-free hub workload.
     for(auto& kv:byt) if(kv.second.size()>=4){ grouped(kv.second,false); for(int id:kv.second)done[id]=1; }

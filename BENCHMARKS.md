@@ -756,3 +756,63 @@ exact at 356.303 s on this slower runner; because its maximum reverse degree is
 8, its search code is byte-for-byte the old key-selection path.  The timing is
 not comparable to the previously reported faster-machine certification and is
 recorded only as an exact regression check.
+
+## Post-scale-free profiling: wide64 frontier policy hypothesis
+
+The next target is wide64.  Its regular degree-four topology removes the degree
+skew that motivated scale-free work balancing, but its broad log-uniform edge
+weights can make minimum reduced-key frontier selection uneven.  The smallest
+first experiment compares the certified balanced-potential bidirectional A*
+against strict equal-relaxation alternation.  This changes no heuristic or
+preprocessing and directly tests whether frontier policy is another hidden
+pathology before considering a new data structure.
+
+## Wide64 frontier-policy screen (rejected)
+
+The certified balanced-potential bidirectional search was compared with strict
+forward/backward alternation and heap-cardinality selection on `wide64_dev`.
+All were exact.  Paired timings moved between 3.75 and 4.06 s while SAFE moved
+between 3.84 and 4.04 s across repeats; the apparent best result was below 8%
+and reversed sign on repetition.  This is benchmark noise / a sub-threshold
+micro-effect, so no wide64 frontier-policy change is retained.
+
+## Landmark heuristic memoization (retained)
+
+Profiling the local2d ALT loop found that the 12-landmark lower bound was
+recomputed when a vertex was pushed, when it was popped, and again after later
+successful decreases.  Within one query the target and landmark tables are
+fixed, so the value is exactly reusable.  A timestamped per-vertex uint64 cache
+now computes each touched vertex's heuristic at most once per query, without
+changing the queue order or admissibility.
+
+A forced-ALT `local2d_dev` comparison improved from 0.866 s to 0.682 s (21.2%)
+and remained exact.  Fresh seed 884422 matched all 10,000 reference answers in
+0.697 s.  On the official `local2d_large` workload, paired on this runner and
+including graph load plus landmark preprocessing, SAFE took 157.546 s and the
+cache took **141.294 s** (10.3% faster); all 300,000 answers matched.  Peak RSS
+rose modestly from 111.9 to 115.4 MiB for one uint64 value and one timestamp per
+vertex.  This small, low-risk improvement composes with the scale-free frontier
+change and is retained.
+
+## Directed road ALT dispatch (retained)
+
+Profiling showed `road2d` has average directed out-degree about 5.42, narrowly
+above the old landmark gate of 5.0.  Consequently the large road workload was
+still using independent bidirectional searches despite having 200,000 queries
+to amortize landmark preprocessing.  This is materially different from prior
+coordinate A*: directed ALT uses exact forward and reverse landmark distances
+and the already-proven directed lower-bound formula.
+
+Raising the observable average-degree gate from 5.0 to 6.0 activates the
+existing 12-landmark implementation for `0.5 <= Q/V < 5`.  Forced dispatch on
+`road2d_dev` improved from 4.422 s to 1.999 s (2.21x), exact.  Fresh generator
+seed 553311 improved from 4.302 s to 2.072 s (2.08x), matching all 10,000
+reference answers.
+
+On official `road2d_large`, the retained SAFE path took 356.303 s on this
+runner.  Directed ALT, including graph loading, 24 directed landmark SSSPs,
+and all 200,000 queries, took **174.518 s** at 139.8 MiB peak RSS and matched
+every official answer.  This is a **2.04x workload improvement**.  The dispatch
+uses only Q/V and observed average degree; hugeq remains on its earlier
+high-Q/V separator path, scale-free does not meet Q/V, and undirected behavior
+is unchanged except for the already-targeted local2d lattice.
