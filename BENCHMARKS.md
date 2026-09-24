@@ -843,3 +843,80 @@ The retained dispatch does not lower the general Q/V threshold.  It permits
 torus topology check (`lattice_side`), while keeping the low-degree and Q/V<5
 requirements.  This generalizes across seeds, excludes scale-free and 3-D
 lattice graphs structurally, and preserves uint64 distance arithmetic.
+
+## Certified combined checkpoint (full official grade)
+
+The complete six-large grade finished on 2026-09-23 after the scale-free work
+balancing, heuristic memoization, directed-road ALT, and sparse-torus ALT were
+combined.  `result-latest.json` preserves the machine-readable result.
+
+| workload | solver time | peak RSS | speedup | correctness |
+|---|---:|---:|---:|---|
+| road2d_large | 166.047 s | 140 MiB | 11.878x | exact |
+| lattice3d_large | 183.412 s | 70 MiB | 18.995x | exact |
+| local2d_large | 131.644 s | 115 MiB | 9.138x | exact |
+| scalefree_large | 20.574 s | 49 MiB | 146.969x | exact |
+| hugeq_large | 39.138 s | 743 MiB | 109.162x | exact |
+| wide64_large | 103.683 s | 437 MiB | 21.067x | exact |
+
+Global geomean is **43.619x**, Local geomean is **13.875x**, and Overall is
+**29.775x**.  The weakest score contribution is now local2d, followed by
+road2d; lattice3d and wide64 form the next tier.  This is the new immutable
+production checkpoint for subsequent experiments.
+
+## Landmark memory-layout audit hypothesis
+
+The current ALT query loop reads one distance from each of 12 landmark-major
+arrays, creating 12 independent memory streams for every heuristic cache miss.
+After memoization, landmark-table bandwidth is a plausible remaining local2d
+bottleneck.  The next isolated experiment transposes the static tables to
+vertex-major order so all landmark values for one vertex occupy adjacent cache
+lines.  It changes neither landmarks nor heuristic arithmetic; paired forced
+ALT dev timing is the rejection gate before any large run.
+
+### Landmark layout result (rejected)
+
+Vertex-major directed tables improved forced road ALT dev runs by roughly
+7--13% and fresh seed 734521 from 2.083 s to 1.555 s.  However, the official
+large run improved only from the certified 166.047 s to 155.116 s (6.6%), below
+the retention threshold, while undirected local2d slightly regressed.  A
+second interleaved forward/reverse layout varied from faster to slower across
+repeats.  The experiment is rejected as a marginal/cache-noise optimization;
+production keeps the simpler landmark-major tables.
+
+## Lattice3d dispatch audit hypothesis
+
+Lattice3d is now the least-specialized global workload.  It misses ALT because
+its exact regular degree is six and Q/V is about 0.1, while the landmark gate
+requires average degree below six and ordinarily Q/V at least 0.5.  A forced
+12-landmark dev experiment measures complete preprocessing plus queries before
+changing either gate.
+
+### Lattice3d forced-ALT result (rejected)
+
+Forced 12-landmark ALT was exact and improved public dev from 9.622 s to
+7.610 s and fresh seed 888137 from 10.606 s to 6.799 s.  However, on the
+official large workload it took 170.227 s and 93.6 MiB versus the certified
+183.412 s: only a 7.2% gain.  The larger graph's 12 full preprocessing SSSPs
+consume most of the saved query work.  This is below the retention threshold,
+so the degree-six/QV gates remain unchanged.
+
+## Compact landmark-distance hypothesis
+
+After heuristic memoization, every newly touched vertex still loads 12 uint64
+landmark distances (24 for directed ALT).  Local2d and road shortest distances
+may fit uint32 even though the solver must remain uint64-correct generally.
+The next experiment detects this from computed tables, compacts only when every
+entry is finite and <= UINT32_MAX, and leaves wide64 on uint64.  The expected
+upside is lower landmark memory bandwidth with no arithmetic approximation.
+
+### Compact landmark-distance result (rejected)
+
+The exact uint32-compaction prototype detected representability after landmark
+construction and retained uint64 automatically otherwise.  It was exact on
+local2d, directed road2d, and wide64 dev.  Paired results were 0.653/0.659 s on
+local2d (no gain), 1.831/1.645 s on road2d (10.2%), and 1.023/1.141 s on
+wide64 (regression from the detection/conversion scan).  Since the intended
+weakest workload received no benefit, wide64 regressed, and the road-only gain
+overlaps the rejected marginal layout effect, the added representations and
+branches are not retained.
