@@ -1,0 +1,153 @@
+{
+  "solver": "/root/code/shortest-path-competition/solver",
+  "solver_sha256": "2582aed37dab141b5d52d618ca4a14879c2d8747e7579c7b30a63bce9ad5401d",
+  "solver_source": "solver.cpp",
+  "solver_source_sha256": "4610587e83f4bd6e8ec92db0ae1efe7cd9ddf4167e6535b04439cff4f8b03fc0",
+  "foundation_source_sha256": "cc85551375687ca7d73c335cda168ca92802f3926131eb010dec89cfb8a446ef",
+  "foundation_flags": [
+    "-O2",
+    "-std=c++17"
+  ],
+  "repeats": 3,
+  "baseline_repeats": 5,
+  "baseline_probe": 2000,
+  "limits_enforced": true,
+  "mem_cap_bytes": 4294967296,
+  "instances": [
+    {
+      "category": "GLOBAL",
+      "graph": "instances/road2d_large.graph",
+      "queries": "instances/road2d_large.queries",
+      "baseline": {
+        "mode": "probe",
+        "Q": 200000,
+        "n1": 500,
+        "n2": 2000,
+        "t1": 2.439518112980295,
+        "t2": 9.52907138701994,
+        "parse_s": 0.07633368830041398,
+        "per_query_s": 0.004726368849359763
+      },
+      "raw_speedup": 56.543610171137004,
+      "t_base": 945.350103560253,
+      "t_solver": 16.718955522985198,
+      "speedup": 56.543610171137004,
+      "note": "ok",
+      "max_rss_bytes": 207745024,
+      "cpu_s": 16.707901999999997
+    },
+    {
+      "category": "GLOBAL",
+      "graph": "instances/lattice3d_large.graph",
+      "queries": "instances/lattice3d_large.queries",
+      "baseline": {
+        "mode": "probe",
+        "Q": 30000,
+        "n1": 500,
+        "n2": 2000,
+        "t1": 28.429448647948448,
+        "t2": 110.23393445601687,
+        "parse_s": 1.1612867119256407,
+        "per_query_s": 0.054536323872045614
+      },
+      "raw_speedup": 102.55935477945445,
+      "t_base": 1637.251002873294,
+      "t_solver": 15.963936262996867,
+      "speedup": 102.55935477945445,
+      "note": "ok",
+      "max_rss_bytes": 370597888,
+      "cpu_s": 15.949489
+    },
+    {
+      "category": "LOCAL",
+      "graph": "instances/local2d_large.graph",
+      "queries": "instances/local2d_large.queries",
+      "baseline": {
+        "mode": "probe",
+        "Q": 300000,
+        "n1": 500,
+        "n2": 2000,
+        "t1": 1.0944555010064505,
+        "t2": 4.198941403010394,
+        "parse_s": 0.059626867005135864,
+        "per_query_s": 0.002069657268002629
+      },
+      "raw_speedup": 47.31451813249472,
+      "t_base": 620.9568072677939,
+      "t_solver": 13.124022642034106,
+      "speedup": 47.31451813249472,
+      "note": "ok",
+      "max_rss_bytes": 397905920,
+      "cpu_s": 13.116662
+    },
+    {
+      "category": "GLOBAL",
+      "graph": "instances/scalefree_large.graph",
+      "queries": "instances/scalefree_large.queries",
+      "baseline": {
+        "mode": "probe",
+        "Q": 50000,
+        "n1": 500,
+        "n2": 2000,
+        "t1": 16.61808372399537,
+        "t2": 69.30505675601307,
+        "parse_s": -0.9442406200105324,
+        "per_query_s": 0.0351246486880118
+      },
+      "raw_speedup": 198.66527582280912,
+      "t_base": 1755.2881937805796,
+      "t_solver": 8.835405113000888,
+      "speedup": 198.66527582280912,
+      "note": "ok",
+      "max_rss_bytes": 42475520,
+      "cpu_s": 8.833584
+    },
+    {
+      "category": "GLOBAL",
+      "graph": "instances/hugeq_large.graph",
+      "queries": "instances/hugeq_large.queries",
+      "baseline": {
+        "mode": "probe",
+        "Q": 600000,
+        "n1": 500,
+        "n2": 2000,
+        "t1": 1.7030176779953763,
+        "t2": 6.776374550012406,
+        "parse_s": 0.01189872065636699,
+        "per_query_s": 0.0033822379146780197
+      },
+      "raw_speedup": 223.06512517849114,
+      "t_base": 2029.3546475274682,
+      "t_solver": 9.097588185977656,
+      "speedup": 223.06512517849114,
+      "note": "ok",
+      "max_rss_bytes": 1241890816,
+      "cpu_s": 9.090242
+    },
+    {
+      "category": "LOCAL",
+      "graph": "instances/wide64_large.graph",
+      "queries": "instances/wide64_large.queries",
+      "baseline": {
+        "mode": "probe",
+        "Q": 30000,
+        "n1": 500,
+        "n2": 2000,
+        "t1": 16.25304960599169,
+        "t2": 72.51082836795831,
+        "parse_s": -2.4995433146638533,
+        "per_query_s": 0.03750518584131108
+      },
+      "raw_speedup": 39.11617002965981,
+      "t_base": 1122.6560319246685,
+      "t_solver": 28.700561202014796,
+      "speedup": 39.11617002965981,
+      "note": "ok",
+      "max_rss_bytes": 662663168,
+      "cpu_s": 28.696353
+    }
+  ],
+  "global_track_geomean": 126.61294590690134,
+  "local_track_geomean": 43.02049204904664,
+  "overall_geomean": 88.35080960833166
+}
