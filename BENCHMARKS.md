@@ -1756,3 +1756,29 @@ and the projected Overall gain is about 11%, below the requested roughly
 that result belongs to the preserved 4610587e baseline. Formal >=150x remains
 open. Preserve the current candidate and prioritize a different local/wide
 architecture next; the failed road and full-label routes are closed.
+
+### WSL formal sparse-separator result and next architecture screens (2026-09-27)
+
+The WSL full six-large run for commit `7063c19` completed with all six rows
+exact at **Overall 94.295x**; `hugeq_large` took **5.087 s**. This is now the
+formal baseline to beat. It replaces the earlier 97.64--98.83x projection,
+which was never a formal score. The matching WSL JSON is not available in this
+cloud checkout, so no additional digits, per-row times, or RSS numbers are
+claimed. Keep the prior `result-integrated-4610587-full.json` as the preserved
+88.35080960833166x rollback artifact rather than overwriting it.
+
+After `0adf4a4`, a bounded screen revisited the 3-D lattice landmark-build/query
+tradeoff because this is one of the remaining plausible preprocessing/query
+composition changes. All tested counts (64, 72, 80, 88, 96, 104, 128 and 160)
+matched every `lattice3d_dev` answer. A representative sequential screen was
+1.791, 1.985, 1.790, 1.706, 1.683, 1.716, 1.780 and 1.938 seconds respectively;
+96 tables used 51,264 KiB versus 63,940 KiB for 128. This supports only a
+roughly 5--11% dev improvement, not a multi-fold end-to-end route, and timings
+were noisy. Do not integrate or request a full WSL run for it yet.
+
+The wide64 two-active-table screen was exact but consistently regressed dev
+from about 0.80 s to 0.94--1.01 s. Six and eight active tables reduced work;
+the retained eight-table candidate measured 2,891,040 pops / 9,012,338 scans
+versus 4,024,305 / 12,191,972 for four tables, but this remains a modest
+optimization currently undergoing WSL testing, not a new formal Overall.
+No credible new multi-fold architecture was found in this bounded continuation.
