@@ -1,0 +1,88 @@
+{
+  "source_sha256": "817fe03416a0c8d529e074b876d0a0429bc6e1bdd47b8cf73e1f9fb18414d599",
+  "binary_sha256": "b2d7df0ff8c15fdcf567f1067671cbeb3541d8c1b39f19fa74baa991d67661a3",
+  "validation": [
+    {
+      "name": "fresh",
+      "exact": true,
+      "time_rss": "WALL 1.60 RSS_KIB 158924",
+      "log": "/tmp/production_sparse_fresh.log"
+    },
+    {
+      "name": "road2d",
+      "exact": true,
+      "time_rss": "WALL 0.97 RSS_KIB 32240",
+      "log": "/tmp/production_sparse_road2d.log"
+    },
+    {
+      "name": "lattice3d",
+      "exact": true,
+      "time_rss": "WALL 1.35 RSS_KIB 66556",
+      "log": "/tmp/production_sparse_lattice3d.log"
+    },
+    {
+      "name": "local2d",
+      "exact": true,
+      "time_rss": "WALL 0.96 RSS_KIB 62996",
+      "log": "/tmp/production_sparse_local2d.log"
+    },
+    {
+      "name": "scalefree",
+      "exact": true,
+      "time_rss": "WALL 0.40 RSS_KIB 11448",
+      "log": "/tmp/production_sparse_scalefree.log"
+    },
+    {
+      "name": "hugeq",
+      "exact": true,
+      "time_rss": "WALL 1.06 RSS_KIB 32208",
+      "log": "/tmp/production_sparse_hugeq.log"
+    },
+    {
+      "name": "wide64",
+      "exact": true,
+      "time_rss": "WALL 0.41 RSS_KIB 23072",
+      "log": "/tmp/production_sparse_wide64.log"
+    },
+    {
+      "name": "hugeq_large",
+      "exact": true,
+      "time_rss": "WALL 5.67 RSS_KIB 176528",
+      "log": "/tmp/production_sparse_hugeq_large.log"
+    }
+  ],
+  "formal_grade": false,
+  "previous_formal_overall": 88.35080960833166,
+  "paired_baseline": {
+    "wall_s": 10.33,
+    "rss_kib": 1212920,
+    "exact": true,
+    "binary_sha256": "2582aed37dab141b5d52d618ca4a14879c2d8747e7579c7b30a63bce9ad5401d"
+  },
+  "targeted_repeats": [
+    {
+      "wall_s": 4.71,
+      "rss_kib": 176292,
+      "exact": true
+    },
+    {
+      "wall_s": 4.68,
+      "rss_kib": 176484,
+      "exact": true
+    },
+    {
+      "wall_s": 4.72,
+      "rss_kib": 176484,
+      "exact": true
+    },
+    {
+      "wall_s": 5.67,
+      "rss_kib": 176528,
+      "exact": true
+    }
+  ],
+  "projected_overall_range": [
+    97.64051857515902,
+    98.83204475196284
+  ]
+}

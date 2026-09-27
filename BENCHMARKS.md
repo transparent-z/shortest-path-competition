@@ -1257,3 +1257,502 @@ and result SHA256
 The solver source is preserved as
 `research/checkpoints/certified-integrated-4610587.cpp`; the 150x target is
 still open.
+
+### Wide64 landmark-pair potential screen (2026-09-27)
+
+An exact pairwise-landmark triangle lower bound was added to ALT4 in an
+isolated prototype. It matched wide64_dev, but settled 4.024M heap entries /
+scanned 12.192M arcs versus 3.379M / 12.228M for production; 0.36s dev time
+was indistinguishable from about 0.37s retained. Reject before large testing;
+the formally certified solver remains unchanged.
+
+### Local and wide64 structural-potential screens (2026-09-27)
+
+Selecting all-query top-4 local-grid landmarks instead of the target-near
+anchors was exact on local2d_dev, but a same-session run took 0.93s / 61.3MiB
+and 1.087M pops / 3.726M scans, versus 0.87s / 61.5MiB on the certified
+path. Reject before large testing.
+
+On wide64_dev, a weighted-axis torus relaxation derived from per-cut minimum
+edge weights was exact but took 2.25s and expanded 28.20M pops / 101.95M arcs,
+versus 0.37s and 3.38M / 12.23M for 24-landmark ALT4. A second exact relaxed
+graph collapsed 2x2 cells and used per-boundary minimum crossing weights;
+24 coarse ALT tables took 0.024s to build, but total was 3.41s / 15.3MiB
+with 40.73M pops / 147.27M scans. Both candidates are rejected before large
+testing. Scratch sources remain under `/tmp`; production SHA is unchanged.
+
+Two additional exact local2d batch-profile ideas failed dev work gates. Using
+24 global farthest-point landmarks only for long-displacement queries cost an
+extra 0.076s preprocessing and raised total dev time from 0.88s to 1.03s; the
+625 long-branch queries expanded 1.368M / 5.010M pops/scans versus 0.471M /
+1.713M using the retained 256-grid top-4. A multi-source distance profile to
+each spatial target cell used one lookup per node but was too weak: it expanded
+3.881M / 14.160M pops/scans and took 1.03s total, also versus 0.88s retained.
+Both matched all local2d_dev answers and remain scratch-only; no large run.
+
+Two endpoint-local ALT variants also failed the dev time gate. Selecting the
+best four from the 4x4 nearest-anchor pool reduced work to 980,929 pops /
+3,533,064 scans but still took 0.88s versus 0.87s. Separate source-near and
+target-near potentials in bidirectional ALT were exact, with 552,877 short
+query pops / 2,006,224 scans and 0.90s total versus 0.87s retained. Reject
+without large testing; source and checkpoint are unchanged.
+
+Scheduling that endpoint-specific bidirectional search by cumulative arc work
+reduced short-query work further to 505,509 pops / 1,836,416 scans (balanced
+918,208 scans per side) and remained exact, but dev total was 0.91s versus
+0.87s retained. Reject before fresh/large; the extra potential work still
+dominates.
+
+Using 24 global landmarks with balanced biALT only for long-displacement
+local2d queries was exact but took 1.11s / 71.4MiB total, including 0.082s
+global preprocessing. Its 625 long queries expanded 1.375M pops / 5.033M
+scans, so reject before large testing.
+
+A 128-settlement exact witness search through strictly lighter edges on
+local2d_dev found only 352 additional undirected replacements, raising edge
+removal from 8.009% to 8.360%. It settled 438,638 vertices / scanned 1.753M
+arcs, increased preprocessing from 0.005s to 0.027s, and total time from
+0.87s to 0.91s. All dev answers were exact; reject before large testing.
+
+On directed road2d_dev, bounded strict-lighter witnesses found only 553 extra
+undirected replacements (0.203 percentage points). They required 1.053M
+settlements / 5.746M scans; CH shortcut count fell by only 173, while
+sparsification grew from 0.027s to 0.096s and total dev time from 0.93s to
+0.98s. Exact but rejected before large testing.
+
+An exact CH DAG-label index on road2d_dev built 11.77M labels in 1.224s
+(179.6MiB compact storage) and returned exact answers, but total dev was
+2.02s versus 0.93s retained. On road2d_large the 120M-label guard aborted
+construction after 18.39s at about 2.07GiB RSS; exact CH fallback returned
+all answers, but total was 35.91s versus 16.72s. Reject the full-label index
+for time and scale; no production code changed.
+
+### Formal Overall comparison and rank-Dijkstra screen (2026-09-27)
+
+| Formal candidate | Source SHA256 prefix | Large exact rows | Overall geomean | Matching result |
+|---|---|---:|---:|---|
+| Current retained integrated solver | `4610587e83f4` | 6/6 | 88.35080960833166x | `result-integrated-4610587-full.json` |
+| Earlier hugeq4 integrated solver | `a9e6cc622981` | 6/6 | 51.946922866870345x | `result-hugeq4-full.json` |
+
+Both results are official full six-large outputs using the same `grade.py`
+geometric mean over the six speedups. For the current row-by-row runtimes,
+RSS and exactness, see the full table in the 4610587e certification section
+above. The current source matches
+`research/checkpoints/certified-integrated-4610587.cpp`; its matching result
+was produced from binary SHA256
+`2582aed37dab141b5d52d618ca4a14879c2d8747e7579c7b30a63bce9ad5401d`.
+
+The requested `python` command itself exits 127 here because it is not
+installed as a command name. `/usr/bin/python3` is available (Python 3.14.4),
+so the repaired invocation is `python3 ...`; all subsequent Python checks use
+that executable. There was a separate earlier 127 incident in which a stale
+road prototype failed compilation on the removed symbol
+`road_region_arc_may_be_shortest`, and `/usr/bin/time` then tried to execute
+the absent binary. The two causes are distinct.
+
+An exact ordinary one-sided Dijkstra candidate was screened for wide64 using
+only the verified high-weight 2-D torus structure to skip landmark building.
+It compiled and matched all six official dev outputs. On wide64_dev the
+candidate took 6.016s / 12MiB (6.10s first run), compared with the retained
+ALT path's recorded ~0.37s dev run. Rank queries select powers-of-two settle
+positions, so this does not produce a shallow search. Reject before fresh or
+large testing; `solver.cpp` was not changed.
+
+The current solver recheck on the same wide64_dev graph took 0.36s / 23MiB
+and was exact. A separate exact distance-preserving shortcut graph added
+two-edge straight-line arcs after the 24 landmark tables were built. It
+compiled and matched all six dev answer files, but wide64_dev took 0.44s /
+32MiB; it added 164,570 arcs, increasing total arcs from 181,488 to 346,058,
+and query work from 3.38M heap pops / 12.23M scans to 4.26M / 22.15M. Reject
+before fresh-seed or large testing. Scratch source:
+`/tmp/wide64_two_step_shortcuts.cpp`; production source remains unchanged.
+
+An exact local2d tile-portal oracle (B=8) also passed all six dev comparisons.
+Tile APSP and portal overlay preprocessing took 0.207s for 784 tiles, 20,361
+portals, and 532,248 directed arcs; the existing 256-grid landmark build took
+0.798s. Query work was 464,712 portal pops and 10.562M scans. End-to-end
+local2d_dev was 1.11s/85MiB, slower and larger than the same-session retained
+0.87s/62MiB. Dense overlay scans erased the pop reduction; reject before
+fresh/large validation. Scratch source:
+`/tmp/local_tile_portal_oracle.cpp`; no production source changed.
+
+Road CH cumulative-work frontier scheduling passed road2d_dev exactness but
+was 0.89s versus 0.89s retained and increased actual scans: 3.69M versus 3.40M
+stall arcs and 3.08M versus 2.90M relaxation arcs. Reject before fresh/large.
+Two variants using `minF + minB >= best` in the upward-only CH query were
+incorrect: the first had 4,159/10,000 wrong road2d_dev answers with stall, and
+disabling stall still left the first answer wrong. The generic bidirectional
+bound is not valid for this CH frontier implementation as applied; no
+large/fresh test and no production source change.
+
+A structural wide64 64-landmark candidate retained four-anchor per-query ALT
+selection, compiled, and matched all six dev outputs, fresh seed 987654321 /
+`lm64-screen`, and wide64_large exactly. Large settled work fell from the
+instrumented 24-landmark baseline's 213.08M pops / 770.73M scans to 110.42M /
+399.30M, while large runtime improved only from 28.65s to 26.12s and 26.68s on
+two candidate runs. RSS rose from 647MiB to 1,272MiB; wide64_dev regressed from
+0.36s to 0.44-0.46s. Reject: the end-to-end 7-9% large gain is too small for
+the 150x objective and the extra 625MiB. Production remains source SHA
+`4610587e83f4bd6e8ec92db0ae1efe7cd9ddf4167e6535b04439cff4f8b03fc0`.
+
+A 128-settlement strict-lighter Dijkstra witness pass on lattice3d_dev found
+7,701 additional undirected replacements, moving sparsification from 44.956%
+to 50.024%. Query scans fell 10.1% (18.315M to 16.458M) and pops stayed near
+5.28M, but witness preprocessing added 0.43s and total dev time rose from
+1.22s to 1.87s. Reject before fresh/large testing.
+
+An exact same-source, same-leaf multi-goal forward ALT variant on
+hugeq_large retained separator answers as feasible alternatives and matched
+all official answers, but tied the retained path at 9.63s / 1.21GB (about
+1,185MiB RSS). It
+processed 23,568 grouped searches (20.92M pops / 113.41M arc inspections).
+Reject before fresh-seed validation. Scratch source:
+`/tmp/hugeq_source_group_alt.cpp`; production unchanged.
+
+On lattice3d_dev, composing three exact 2-D coordinate-projection relaxations
+with the retained 128-landmark balanced ALT was exact but reduced work by less
+than 0.02% (5.286M pops / 18.314M scans to 5.286M / 18.314M). The 24-landmark
+tables on each small quotient graph added negligible memory, but every query
+heuristic evaluation cost more; runtime rose from 1.22s to 1.83s. Reject before
+fresh/large testing.
+
+A feasible-intersection update on each relaxed CH endpoint did not repair the
+`minF + minB >= best` stopping candidate: with stall it still returned a wrong
+road2d_dev answer (first observed at query 2). Retain the conservative CH stop.
+
+Sixty-four 32,768-settlement clipped wide64 ALT roots were exact on all six dev
+sets, fresh wide64 seed 987654321 / `lm64-screen`, and wide64_large. Large
+search work barely changed (213.08M / 770.73M to 211.02M / 763.26M pops/scans),
+while time regressed from 28.65s to 35.03s and RSS from 647MiB to 1,647MiB.
+Reject; the truncated global cover does not scale to the large graph.
+
+A sparse 16x16 grid of clipped roots, each capped at 32,768 settled nodes,
+matched wide64_large but took 35.75s / 1.71GB with 206.40M pops / 746.56M scans;
+reject. On local2d_dev, the same local-root method plus 24 global landmarks
+matched all answers at 0.83s / 114MiB versus 0.89s / ~110MiB, but raised query
+work from about 1.06M / 3.83M to 1.21M / 4.36M pops/scans. The small dev-time
+gain comes from preprocessing only and does not justify large testing.
+
+The clipped-local-root candidate was nevertheless checked on local2d_large
+because the retained 256 full-root preprocessing alone takes 5.00s. With 256
+32,768-settlement local roots plus 24 global landmarks, the candidate matched
+all large answers but took 31.43s / 366MiB; the exact retained run was 13.66s /
+379MiB. It performed 246.33M pops / 903.09M arc scans. Saving roughly 4.34s
+of full local-grid preprocessing did not offset the weaker clipped tables;
+reject. Scratch source `/tmp/local2d_capped_landmarks.cpp`, no production edit.
+
+For road2d, the exact feasible corridor incumbent (best original backbone
+path through a structurally recognized fast row/column) compiled and matched
+road2d_dev. It initialized the safe CH search with a concrete route cost, but
+instrumented dev work was unchanged: 755,450 versus 755,551 pops, 3.401M
+versus 3.402M stall scans, and 2.902M versus 2.902M relax scans. Runtime was
+0.91s versus 0.94s, within noise; reject before large testing. Production
+source remains unchanged.
+
+The road CH edge-difference priority proxy compiled and matched road2d_dev,
+but raised shortcut count from 224,335 to 226,694. Query work was 752,656 pops
+/ 3.434M stall scans / 2.928M relax scans versus 755,551 / 3.402M / 2.902M
+retained. At 0.88s versus 0.94s dev, the candidate showed no material
+end-to-end win and was rejected before large testing. Scratch source:
+`/tmp/road_ch_edge_diff_profile.cpp`; production unchanged.
+
+For wide64, 24 exact landmark roots were selected greedily from a 32x32
+spatial candidate grid by sampled pairwise Manhattan endpoint separation.
+Exact SSSP tables were then built for the selected roots. The candidate
+compiled and matched every wide64_dev answer, but the geometry proxy selected
+poor weighted-metric roots: 4.418M pops / 15.949M scans and 0.46s versus
+3.379M / 12.228M and about 0.36s with retained farthest-point roots. Reject
+before fresh-seed or large testing; production is unchanged.
+
+hugeq profiling showed 19.31M pops / 104.70M arc scans in 25,912 restricted
+groups after 224 top, 223 second, 468 third, and 560 fourth-level hubs. A fifth
+separator level initially missed shortest paths that leave and re-enter the
+same fourth-level region; adding the parent-micro boundary candidate repaired
+that omission. The fixed candidate matched 260,000 forced hugeq_dev answers
+and all hugeq_large answers, but took 8.75s / 1,991MiB versus 9.07s / 1,184MiB
+for the retained profiled run. Reject the 3.5% gain at +807MiB. Scratch source
+`/tmp/hugeq_depth5.cpp`; no production edit.
+
+On wide64, exact original row/column-cycle prefixes supplied the best feasible
+L-shaped torus route as an initial ALT4 upper bound. The candidate matched all
+wide64_dev answers, but changed work only from 3.379M pops / 12.228M scans to
+3.379M / 12.190M; dev time was 0.34s versus about 0.36s. Reject before fresh
+seed or large testing. Scratch source `/tmp/wide64_route_upper.cpp`; production
+unchanged.
+
+Adding nearby fast-row/fast-column intersection routes to the road CH
+incumbent compiled and matched road2d_dev after fixing a scratch-only loop
+bound error. The candidate still had 755,445 pops / 3.401M stall scans /
+2.902M relax scans and took 0.92s, effectively unchanged from baseline;
+reject before large testing. Scratch source `/tmp/road_ch_route_ub.cpp`;
+production unchanged.
+
+Using actual witness-generated shortcut counts in a signed edge-difference
+priority produced 218,865 road2d_dev shortcuts versus 224,335 retained and
+matched all answers, but required 2.90s / 37MiB to build the hierarchy versus
+about 0.9s / 32MiB. A zero-clamped score instead reproduced the retained
+224,335 shortcuts in 0.90s. Reject the actual-count ordering before large
+testing; scratch sources `/tmp/road_ch_actual_ed.cpp` and
+`/tmp/road_ch_actual_ed_offset.cpp`; production unchanged.
+
+Wide64's exact top-four ALT selection was changed to select at most one
+landmark from each spatial quadrant around the source-target midpoint. It
+matched all dev answers but expanded 3.617M pops / 13.049M scans and took
+0.38s, compared with 3.379M / 12.228M and about 0.36s retained. Reject before
+fresh-seed/large testing; scratch source `/tmp/wide64_diverse_landmarks.cpp`.
+
+Profiling road CH on large split 8.14s contraction from 8.40s query time;
+query work was 183.73M stall-arc checks plus 147.26M relaxation scans. Removing
+stall remained exact on official dev, fresh road2d_dev seed 20260927, and all
+road2d_large answers. It changed large query work to 36.42M pops / 258.82M
+relax scans; total was 16.24s with instrumentation. Uninstrumented same-run
+totals were 16.50s retained and 16.18s no-stall, a 1.9% gain; reject for the
+150x campaign. Scratch source `/tmp/solver_nostall.cpp`.
+
+Wide64 balanced bidirectional ALT matched dev and large exactly but was slower
+end-to-end: dev 0.42s versus 0.36s retained; large 37.10s / 647MiB versus
+28.70s / 632MiB. Its 210.997M pops / 763.352M scans reduced scans by only
+about 1% from the retained 213.081M / 770.732M. Reject; certified source
+unchanged. Scratch source `/tmp/wide64_bialt_current.cpp`.
+
+
+### Wide64 balanced bidirectional ALT recheck (2026-09-27)
+
+The retained wide64 path uses the strongest four of 24 exact landmark tables
+in a forward ALT search. A current-source candidate instead used the existing
+balanced bidirectional ALT engine with its exact minimum-key termination
+condition. It matched all wide64_dev answers, but dev work was 3.357M pops /
+12.160M scans and 0.42s versus 3.379M / 12.228M and 0.36s retained. Because
+large queries are more local, it was also checked on wide64_large: all official
+answers matched, but it took 37.10s / 647MiB with 210.997M pops / 763.352M
+scans. The retained large result is 28.70s / 632MiB with about 213.081M /
+770.732M work. The roughly 1% reduction in scans does not pay for two-sided
+queue and heuristic overhead; reject. Scratch source
+`/tmp/wide64_bialt_current.cpp`; the certified solver remains unchanged.
+The vertex-major storage candidate also matched wide64_dev and wide64_large,
+but took 0.40s on dev and 35.20s / 996MiB on large versus about 0.36s and
+28.70s / 632MiB retained. Reject; scratch source
+`/tmp/wide64_vertex_major.cpp`.
+
+Replacing local2d's 256 local-grid tables with 24 global landmarks and routing
+Manhattan-near pairs to plain bidirectional Dijkstra matched both local2d_dev
+and local2d_large exactly. It took 0.58s / 23MiB on dev but regressed the
+large workload to 42.15s / 147MiB versus 13.12s / 379MiB retained; reject.
+Scratch source `/tmp/local_global_bidir.cpp`.
+
+Wide64 24-landmark distances were also conservatively quantized into 32-bit
+root-major tables. The admissible consistent bucket potential matched dev and
+large, but took 0.70s / 28MiB and 45.00s / 815MiB versus about 0.36s / 32MiB
+and 28.70s / 632MiB retained; reject. Scratch `/tmp/wide64_compressed_alt.cpp`.
+
+Selecting local2d's top four of 256 exact anchors by endpoint distance gap
+instead of nearby geometric anchors matched dev and reduced search work by
+about 2.8%, but total dev time was 0.92s versus 0.89s. Reject before large;
+scratch `/tmp/local_score_landmarks.cpp`.
+
+Wide64 nested-dissection contraction hierarchy was exact on dev but took
+27.14s / 55MiB and built 1.24M shortcuts on only 50k vertices; reject before
+large (retained dev path is subsecond). Road CH with direct directed ALT
+frontier potentials and a symmetric-relaxation ALT variant both returned
+wrong road2d_dev answers under their tested stopping rules; reject before
+large. Scratch `/tmp/wide64_nested_ch.cpp`, `/tmp/road_ch_alt.cpp`, and
+`/tmp/road_ch_relaxed_alt_gstop.cpp`.
+
+Saving wide64's exact ALT key per vertex matched dev and large. Two comparable
+large runs were 27.48s and 28.02s against a same-session 28.07s baseline; a
+single 4,056s `time` reading contradicted wall-clock elapsed and was discarded.
+No stable gain; reject. Lattice3d balanced-ALT saved-key validation was exact
+at 1.16s versus 1.17s dev and was rejected before large. A local2d 32-pop
+bidirectional first stage matched dev but took 0.90s versus 0.89s retained,
+despite 2,626/10,000 exact hits; reject before large.
+
+No-witness nested-dissection CH added only valid shortcuts and matched 16
+independent Dijkstra answers on a fresh 32x32 weighted torus. On wide64_dev,
+40,000/50,176 contractions and 884,626 shortcuts took over 60s without an
+answer file; interrupted and rejected before large. Scratch
+`/tmp/wide64_nested_ch_nowitness.cpp`.
+
+The per-coordinate-cut minimum edge weights formed a consistent torus lower
+bound when summed on the shorter ring arcs and maxed with ALT. It matched
+wide64_dev, but exceeded ALT on only 1.5% of heuristic evaluations and slowed
+dev from about 0.36s to 0.39s; reject before large. Scratch
+`/tmp/wide64_cut_alt.cpp`.
+
+No new candidate was retained in this research round; production remains
+`solver.cpp` SHA256 `4610587e83f4bd6e8ec92db0ae1efe7cd9ddf4167e6535b04439cff4f8b03fc0`.
+The corresponding official full six-large result is still exact at Overall
+88.35080960833166x in `result-integrated-4610587-full.json`. The 150x target
+remains unmet; no redundant full grade was run without a retained change.
+
+### Bounded architecture comparison and radius-label screen (2026-09-27)
+
+User scope: compare 2-3 new directions, time-box the strongest prototype,
+retain only dev/fresh/large-exact stable end-to-end winners, and stop ineffective
+fine tuning when no credible multi-fold route remains. Existing fifth-level
+hugeq, ALT/CH variants, full PLL, tile DDG and full separator-table failures
+were read before selecting a candidate. No previously rejected tuning was run.
+
+The six-instance Overall is an unweighted geometric mean. From 88.3508096x,
+a single 2x instance gain projects 99.1704x; a single 3x gain projects 106.1038x.
+Reaching 150x requires a product of per-instance time improvements of about
+23.9488. These are score projections using the certified baselines, not grades.
+
+| New direction | Potential mechanism / impact on all six | End-to-end feasibility and memory | Exactness requirement / decision |
+|---|---|---|---|
+| Radius-truncated exact two-hop labels for local2d | Replace most short-query searches with intersections; hypothesized 2-3x local improvement -> Overall 99.17-106.10x, other five paths unchanged | About 30M labels projected from dev, 240MB logical 8-byte labels plus vector capacity and existing 379MiB state; build must be cheap enough to pay back query savings | Complete all roots within observable metric radius; only accept intersection <= radius; otherwise exact existing ALT fallback. Selected for bounded prototype. |
+| Exact target-region arc flags for wide64 | Potential 2-3x if query scans collapse; same Overall projection, other five paths unchanged | 16x16 regions imply about 45k boundary-root global SSSPs, versus 24 retained roots. Scaling the measured 5.50s landmark construction gives roughly 10,000s, before queries. About 230MB nominal 256-bit arc flags in addition to graph/index state. Restricted/sampled construction would need a different exactness argument and measured benefit. | Must retain a shortest route to every target in each region, including ties. Reject the full exact construction on preprocessing cost; no code built. |
+| Query-target compressed first-move database for road2d | Could replace two-frontier searches with exact route following; a hypothetical 2x road improvement -> Overall 99.17x, other five paths unchanged | 300,304 vertices x 135,113 observed unique targets gives 40.57B entries, about 15.2GB even at nominal 3 bits per entry before compression/overhead. Requires about 135k full target SSSPs. No evidence of sufficient exact compression or fast construction. | Each move must follow a shortest-path tree toward its target; route following must account for every weight. Reject before implementation: preprocessing and unproven compression dominate. |
+
+Prototype: `/tmp/local_radius_pll.cpp`, compiled with `g++ -O2 -std=c++17`.
+It reuses the existing separator-first PLL order but bounds every search by
+`16 * median(retained edge weight)` (observable, no instance identity). A
+root-distance cache makes pruning scan only the candidate vertex's label list.
+This is a truncated exact-cover index, distinct from capped ALT lower-bound
+landmarks and the rejected full unbounded PLL index. The index has a 12s
+construction guard and a vertex-scaled label-count guard; an incomplete index
+is discarded and the exact production path answers every query.
+
+Correctness: labels encode real positive-weight routes. For any pair with true
+distance <= R, take the earliest-ranked vertex on a shortest path. Both endpoint
+subpaths stay within R. Earlier-root pruning either records that cover or
+substitutes an already-existing equally short cover; truncation cannot remove
+it. Therefore an intersection <= R is the true shortest distance. A larger or
+missing intersection uses the retained exact ALT fallback. The proof requires
+a completed index; partially built labels are never used to certify answers.
+
+All six official dev outputs matched their reference files. local2d_dev built
+4,913,874 labels in 0.884-0.906s, certified 6,991/10,000 queries and took
+1.77-1.78s / 121,592KiB, versus 0.88s for the certified binary in the same
+session. Fresh seed 2026092701, independently generated 48x48 positive-weight
+torus, matched heapq Dijkstra for all 264 queries: 229,061 labels, 0.046s build,
+143 certified hits and 0.08s / 10,940KiB end-to-end. The seed includes self-pairs
+and queries outside the index radius, exercising exact fallback.
+
+A single targeted large screen confirmed the mechanism's failure rather than
+relying only on extrapolation. All 300,000 local2d_large answers matched:
+30,752,036 labels, 6.022s label construction, 37,948,995 preprocessing pops,
+113,221,446 arc scans, 2,135,352,839 label checks, 209,859 certified queries.
+Existing grid-landmark construction still cost 5.035s. Total was **18.90s /
+751,620KiB**, versus the sequential same-session certified run **13.47s /
+388,452KiB**, also all exact. Remaining parsing/intersection/fallback/output
+cost was about 7.84s, near the baseline's 8.46s outside grid construction.
+The 70% query-count coverage primarily avoids cheap searches, while adding
+6s construction and nearly doubling RSS. Reject; no production edit or
+full-grade rerun. Validation metadata is in
+`research/logs/radius-pll-dev-fresh-20260927.json` and
+`research/logs/radius-pll-large-20260927.json`.
+
+No credible multi-fold path emerged from this bounded comparison. Stop this
+run's ineffective tuning as explicitly requested. Preserve the exact 88.3508x
+source/binary/result above; the formal 150x goal remains unmet. A future run
+needs a new evidence-backed architecture, not radius sweeps or another ALT/CH
+variation. No benchmark remains running.
+
+### New retained sparse separator label candidate (2026-09-27)
+
+Production now includes a new exact partial-label engine only behind the
+existing coordinate/high-Q separator dispatch. `solver.cpp` SHA256 is
+`817fe03416a0c8d529e074b876d0a0429bc6e1bdd47b8cf73e1f9fb18414d599`;
+binary SHA256 is `b2d7df0ff8c15fdcf567f1067671cbeb3541d8c1b39f19fa74baa991d67661a3`.
+This is a targeted validated candidate, NOT a new formally certified Overall.
+The authoritative formal result remains the exact six-large 88.3508096x
+artifact for source 4610587e. Its source, original binary and matching JSON
+are preserved at `research/checkpoints/certified-integrated-4610587.{cpp,bin,json}`.
+New candidate source is also saved as
+`research/checkpoints/candidate-sparse-sep-817fe034.cpp`.
+
+Mechanism: retain all four current geometric separator vertex covers and
+membership codes, but collect their 1,475 roots before distance construction.
+Order roots by verified road speed class (fastest first), then observed degree.
+Build directed forward/reverse partial pruned labels using exact route-cover
+pruning and a root-distance cache. Labels store actual route lengths; every
+shortest path through any indexed separator retains a two-hop cover by the
+standard earliest-root induction. Cross-region queries are therefore exact
+label intersections. Same-leaf interior routes retain the original exact
+restricted grouped ALT fallback. Original dense separator construction remains
+available if the index exceeds 20 seconds or 30 million labels. Ordering is
+purely observable graph structure; no filenames/seeds/hashes/identity dispatch.
+Only solver.cpp source changed. No other workload's dispatch or query engine
+was changed. Existing builders now have a topology-only collection mode,
+avoiding duplicate partition logic and shared-state conflicts.
+
+Measurements (all exact):
+- Natural separator order: forced hugeq_dev 260k queries, 24,207,092 labels,
+  11.763s index / 12.28s total / 670,288KiB; reject natural order.
+- Fast-corridor-first roots: same forced dev 4,651,191 labels,
+  1.277s index / 1.62s total / 154,788KiB. Preprocessing work falls from
+  24.945M to 5.107M pops, 130.962M to 25.163M arc scans and 3.152B to
+  130.302M prior-label checks.
+- Fresh seed 2026092702, salt sparse-sep-corridor: generated road graph
+  V=50,176 E=271,475; refsolve answered all 10,000 nontrivial uniform pairs;
+  appended 250k self-pairs force separator dispatch. All 260k match; labels
+  5,048,483, index 1.354s, total 1.53s / 158,820KiB.
+- All six ordinary dev answer files exact for scratch, cleaned candidate and
+  production binary. See research/logs/sparse-sep-dev-fresh-20260927.json,
+  sparse-sep-clean-validation-20260927.json and
+  production-sparse-sep-817fe034-validation.json.
+- hugeq_large: 600,000/600,000 exact at 4.71s / 176,292KiB, repeat 4.68s /
+  176,484KiB; cleaned implementation 4.72s / 176,484KiB. Sequential same-session
+  certified binary 9.17s / 1,212,968KiB, all exact. Approximately 1.95x gain
+  and 85% lower peak RSS. Production recheck later took 5.67s / 176,528KiB;
+  every ordinary dev timing in that block also increased by about 10-20%,
+  so a new sequential certified-binary check is pending to resolve host drift.
+
+A related full-label extension indexed all 50,176 vertices, aiming to remove
+all grouped leaf search. It was exact on forced dev but built 17,817,926
+labels with 2.471B label checks, taking 8.383s construction / 8.82s total /
+472,804KiB. Construction alone exceeds the retained partial-label total on
+large; reject before fresh/large. Prototype /tmp/hugeq_full_corridor_labels.cpp.
+
+Earlier screens this run:
+- Exact landmark-tree jump proposals cannot skip any vertex whose fixed
+  consistent A* key is below the optimum. wide64_dev profiling found only
+  846,689/3,379,244 pops (25.06%) on the final equal-key plateau; even ideal
+  plateau removal supports only about 1.33x query work, before preprocessing
+  and new tables. Probe was dev-exact; reject before building tree jump tables.
+- A large confirmation of the previously screened degree-2 lattice reduction
+  removed 61,827/300,763 vertices but only 12.45% arcs; do not repeat it.
+- New degree<=3 exact elimination feasibility screen on sparsified lattice3d
+  removed 137,719/300,763 vertices (45.79%), while arcs fell from 993,580 to
+  866,100 (12.83%). The remaining core has higher degrees. This does not support
+  a 2x end-to-end improvement given unchanged landmark table/output costs;
+  reject before query-engine implementation. /tmp/torus_degree3_screen.cpp.
+
+The new projected Overall is roughly 98.6x if other five certified times stay
+unchanged and hugeq remains near 4.7s. This is not a grade and is far from 150x.
+Do not run full six-large grade solely for this one ~12% projected Overall win;
+accumulate another large architectural gain first, as requested. Next research
+must attack the weak local/wide paths through a genuinely different mechanism,
+not repeat ALT/CH variants, degree suppression or full PLL.
+
+### Sparse separator continuation: road screen and final paired check
+
+The production recheck's host drift was resolved by a sequential baseline
+run: certified 4610587e binary 10.33s / 1,212,920KiB, candidate 817fe034
+5.67s / 176,528KiB, both all 600k exact. Thus the retained targeted hugeq
+improvement is 1.82-1.96x across comparable blocks, with about 85% lower RSS.
+Projected Overall with otherwise unchanged timings is about 97.7-98.8x;
+this is explicitly uncertified. Validation JSON now records both versions,
+paired baseline and all targeted repeats. Candidate source, binary and metadata
+are preserved as research/checkpoints/candidate-sparse-sep-817fe034.{cpp,bin,json}.
+
+Road applicability was tested rather than assumed. The prototype
+/tmp/road_sparse_sep_candidate.cpp uses the sparse separator engine at legal
+coordinate/directed/degree/query-density dispatch (Q/V>=0.5) and preserves
+CH or directed ALT fallback if the index guard fires. Forced road2d_dev with
+40k appended self-pairs and the new fresh seed's corresponding forced batch
+were exact: 1.57s / 145,176KiB and 1.42s / 139,248KiB. On road2d_large,
+however, just 601 roots generated 33,214,019 labels, 34.129M preprocessing
+pops, 148.778M scans and 980.653M checks in 11.318s. The 30M-label guard
+discarded the index and restored CH. All 200k final answers were exact, but
+total was 30.83s / 951,500KiB. Reject this road dispatch; it was never integrated.
+Production still uses the certified targeted-witness CH/stall road path.
+
+The meaningful retained change in this run is therefore hugeq only. All
+six dev, fresh separator seed and full hugeq_large comparisons are exact.
+No new full six-large grade has been run: only one large winner accumulated,
+and the projected Overall gain is about 11%, below the requested roughly
+25% re-certification trigger. Do not label the new source as 88.3508x-certified;
+that result belongs to the preserved 4610587e baseline. Formal >=150x remains
+open. Preserve the current candidate and prioritize a different local/wide
+architecture next; the failed road and full-label routes are closed.

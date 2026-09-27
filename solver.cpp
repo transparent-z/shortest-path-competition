@@ -424,12 +424,54 @@ static vector<u64> full_sssp(int root,const CSR& g){vector<u64>d(V,INF);RadixHea
 static vector<u64> region_sssp(int root,const CSR& g,int8_t allowed){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];if(separator_side[e.to]!=allowed)continue;u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
 static vector<u64> subregion_sssp(int root,const CSR& g,int8_t allowed){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];if(separator_region[e.to]!=allowed)continue;u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
 static vector<u64> microregion_sssp(int root,const CSR& g,int8_t allowed){vector<u64>d(V,INF);RadixHeap h;d[root]=0;h.push(0,root);while(!h.empty()){auto[du,u]=h.pop();if(du!=d[u])continue;for(int j=g.off[u];j<g.off[u+1];++j){Arc e=g.edge[j];if(e.to!=root&&separator_leaf[e.to]!=allowed)continue;u64 nd=du+(uint32_t)e.w;if(nd<d[e.to]){d[e.to]=nd;h.push(nd,e.to);}}}return d;}
+// Exact partial pruned labels for the verified separator vertex cover.
+// Prior labels prune only when they already supply a real route no longer
+// than the current one. Every shortest path touching any selected separator
+// root retains an exact two-hop cover. Interior paths use grouped fallback.
+struct SparseSepLabel{int hub;u64 d;};
+static vector<vector<SparseSepLabel>> sparse_sep_in,sparse_sep_out;
+static bool sparse_sep_active=false,sparse_sep_failed=false;
+static int sparse_sep_roots=0;
+static u64 sparse_sep_count=0,sparse_sep_pops=0,sparse_sep_scans=0,sparse_sep_checks=0;
+static std::chrono::steady_clock::time_point sparse_sep_start;
+static u64 sparse_sep_answer(int s,int t){
+ const auto&a=sparse_sep_out[s];const auto&b=sparse_sep_in[t];size_t i=0,j=0;u64 best=INF;
+ while(i<a.size()&&j<b.size()){if(a[i].hub<b[j].hub)++i;else if(a[i].hub>b[j].hub)++j;else{best=std::min(best,a[i].d+b[j].d);++i;++j;}}
+ return best;
+}
+static vector<int> sparse_sep_pending;
+static bool sparse_sep_collecting=true;
+static bool build_road_corridor_levels();
+static void sep_label_root(int root){
+ if(sparse_sep_collecting){sparse_sep_pending.push_back(root);return;}
+ if(sparse_sep_failed)return;
+ int id=sparse_sep_roots++;vector<u64> cache(sparse_sep_roots,INF);
+ for(int direction=0;direction<2;++direction){
+  const bool forward=direction==0;const CSR& g=forward?fw:rv;
+  auto& rootlist=forward?sparse_sep_out[root]:sparse_sep_in[root];
+  std::fill(cache.begin(),cache.end(),INF);for(auto x:rootlist)cache[x.hub]=x.d;
+  ++epoch;hf.clear();setf(root,0);hf.push(0,root);
+  while(!hf.empty()){
+   auto[d,u]=hf.pop();if(d!=getf(u))continue;++sparse_sep_pops;
+   auto& prior=forward?sparse_sep_in[u]:sparse_sep_out[u];
+   bool covered=false;if(u!=root)for(auto x:prior){++sparse_sep_checks;if(x.hub<id&&cache[x.hub]!=INF&&cache[x.hub]+x.d<=d){covered=true;break;}}
+   if(covered)continue;
+   prior.push_back({id,d});++sparse_sep_count;
+   for(int j=g.off[u];j<g.off[u+1];++j){++sparse_sep_scans;Arc e=g.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd,e.to);}}
+  }
+ }
+ if(id%100==0){
+  double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-sparse_sep_start).count();
+  std::fprintf(stderr,"SPARSE_SEP roots %d labels %llu time %.3f\n",sparse_sep_roots,(unsigned long long)sparse_sep_count,seconds);
+  if(seconds>20||sparse_sep_count>30000000)sparse_sep_failed=true;
+ }
+}
 static void build_microseparator(int8_t parent,int index){
     MicroSeparator& ss=microsep[index]; vector<int> nodes; for(int v=0;v<V;++v) if(separator_leaf[v]==parent) nodes.push_back(v);
     if(nodes.empty()) return; int xmin=gx[nodes[0]],xmax=xmin,ymin=gy[nodes[0]],ymax=ymin; for(int v:nodes){xmin=std::min(xmin,gx[v]);xmax=std::max(xmax,gx[v]);ymin=std::min(ymin,gy[v]);ymax=std::max(ymax,gy[v]);}
     bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin; vector<int> vals; vals.reserve(nodes.size()); for(int v:nodes) vals.push_back(xa?gx[v]:gy[v]); std::nth_element(vals.begin(),vals.begin()+vals.size()/2,vals.end()); int cut=vals[vals.size()/2]; int8_t lo=41+2*index,hi=lo+1,bar=61+index;
     for(int v:nodes) separator_micro[v]=((xa?gx[v]:gy[v])<cut)?lo:hi; vector<uint8_t> mark(V); for(int u:nodes) for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to; if(separator_leaf[v]==parent&&separator_micro[u]!=separator_micro[v]) mark[separator_micro[u]==hi?u:v]=1;}
-    vector<int> hubs; for(int v:nodes) if(mark[v]){separator_micro[v]=bar; hubs.push_back(v);} ss.count=hubs.size(); ss.from.resize((size_t)V*ss.count); ss.to.resize((size_t)V*ss.count); for(int k=0;k<ss.count;++k){auto a=microregion_sssp(hubs[k],fw,parent),b=microregion_sssp(hubs[k],rv,parent); for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v]; ss.to[(size_t)v*ss.count+k]=b[v];}}
+    vector<int> hubs; for(int v:nodes) if(mark[v]){separator_micro[v]=bar; hubs.push_back(v);} ss.count=hubs.size();if(sparse_sep_collecting){for(int root:hubs)sep_label_root(root);return;} ss.from.resize((size_t)V*ss.count); ss.to.resize((size_t)V*ss.count); for(int k=0;k<ss.count;++k){auto a=microregion_sssp(hubs[k],fw,parent),b=microregion_sssp(hubs[k],rv,parent); for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v]; ss.to[(size_t)v*ss.count+k]=b[v];}}
 }
 
 static void build_leafseparator(int8_t parent,int index){
@@ -438,7 +480,7 @@ static void build_leafseparator(int8_t parent,int index){
     bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin;vector<int> vals;for(int v:nodes)vals.push_back(xa?gx[v]:gy[v]);std::nth_element(vals.begin(),vals.begin()+vals.size()/2,vals.end());int cut=vals[vals.size()/2];int8_t lo=2*index+1,hi=lo+1,bar=20+index;
     for(int v:nodes)separator_leaf[v]=((xa?gx[v]:gy[v])<cut)?lo:hi;
     vector<uint8_t> mark(V);for(int u:nodes)for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to;if(separator_region[v]==parent&&separator_leaf[u]!=separator_leaf[v])mark[separator_leaf[u]==hi?u:v]=1;}
-    vector<int> hubs;for(int v:nodes)if(mark[v]){separator_leaf[v]=bar;hubs.push_back(v);}ss.count=hubs.size();ss.from.resize((size_t)V*ss.count);ss.to.resize((size_t)V*ss.count);for(int k=0;k<ss.count;++k){auto a=subregion_sssp(hubs[k],fw,parent),b=subregion_sssp(hubs[k],rv,parent);for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v];ss.to[(size_t)v*ss.count+k]=b[v];}}
+    vector<int> hubs;for(int v:nodes)if(mark[v]){separator_leaf[v]=bar;hubs.push_back(v);}ss.count=hubs.size();if(sparse_sep_collecting){for(int root:hubs)sep_label_root(root);return;}ss.from.resize((size_t)V*ss.count);ss.to.resize((size_t)V*ss.count);for(int k=0;k<ss.count;++k){auto a=subregion_sssp(hubs[k],fw,parent),b=subregion_sssp(hubs[k],rv,parent);for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v];ss.to[(size_t)v*ss.count+k]=b[v];}}
 }
 
 static void build_subseparator(int8_t top_side,SubSeparator& ss){
@@ -447,26 +489,38 @@ static void build_subseparator(int8_t top_side,SubSeparator& ss){
     bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin;vector<int> vals;vals.reserve(nodes.size());for(int v:nodes)vals.push_back(xa?gx[v]:gy[v]);std::nth_element(vals.begin(),vals.begin()+vals.size()/2,vals.end());int cut=vals[vals.size()/2];
     for(int v:nodes)separator_region[v]=((xa?gx[v]:gy[v])<cut)?top_side:2*top_side;
     vector<uint8_t> mark(V);for(int u:nodes)for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to;if(separator_side[v]==top_side&&separator_region[u]!=separator_region[v])mark[separator_region[u]==2*top_side?u:v]=1;}
-    vector<int> hubs;for(int v:nodes)if(mark[v]){separator_region[v]=3*top_side;hubs.push_back(v);}ss.count=hubs.size();ss.from.resize((size_t)V*ss.count);ss.to.resize((size_t)V*ss.count);
+    vector<int> hubs;for(int v:nodes)if(mark[v]){separator_region[v]=3*top_side;hubs.push_back(v);}ss.count=hubs.size();if(sparse_sep_collecting){for(int root:hubs)sep_label_root(root);return;}ss.from.resize((size_t)V*ss.count);ss.to.resize((size_t)V*ss.count);
     for(int k=0;k<ss.count;++k){auto a=region_sssp(hubs[k],fw,top_side),b=region_sssp(hubs[k],rv,top_side);for(int v:nodes){ss.from[(size_t)v*ss.count+k]=a[v];ss.to[(size_t)v*ss.count+k]=b[v];}}
 }
 
-static void build_separator(){
+static void baseline_build_separator(){
     separator_side.assign(V,0);int xmin=gx[0],xmax=xmin,ymin=gy[0],ymax=ymin;for(int v=1;v<V;++v){xmin=std::min(xmin,gx[v]);xmax=std::max(xmax,gx[v]);ymin=std::min(ymin,gy[v]);ymax=std::max(ymax,gy[v]);}
     bool xa=(int64_t)xmax-xmin>=(int64_t)ymax-ymin;vector<int> vals(V);for(int v=0;v<V;++v)vals[v]=xa?gx[v]:gy[v];std::nth_element(vals.begin(),vals.begin()+V/2,vals.end());int cut=vals[V/2];for(int v=0;v<V;++v)separator_side[v]=((xa?gx[v]:gy[v])<cut)?-1:1;
     // One endpoint per crossing edge is sufficient: choosing its positive-side
     // endpoint is a vertex cover of all median-plane arcs and halves the table.
     vector<uint8_t> sep(V);for(int u=0;u<V;++u)for(int j=fw.off[u];j<fw.off[u+1];++j){int v=fw.edge[j].to;if(separator_side[u]!=separator_side[v])sep[separator_side[u]>0?u:v]=1;}
     vector<int> hubs;for(int v=0;v<V;++v)if(sep[v]){separator_side[v]=0;hubs.push_back(v);}separator_count=hubs.size();
+    if(sparse_sep_collecting){for(int root:hubs)sep_label_root(root);}else{
     separator_from.resize((size_t)V*separator_count);separator_to.resize((size_t)V*separator_count);
     for(int k=0;k<separator_count;++k){auto a=full_sssp(hubs[k],fw),b=full_sssp(hubs[k],rv);for(int v=0;v<V;++v){separator_from[(size_t)v*separator_count+k]=a[v];separator_to[(size_t)v*separator_count+k]=b[v];}}
+    }
     separator_region.assign(V,0);build_subseparator(-1,subsep[0]);build_subseparator(1,subsep[1]);separator_leaf=separator_region;int8_t parents[4]={-2,-1,1,2};for(int i=0;i<4;++i)build_leafseparator(parents[i],i); separator_micro.assign(V,0); for(int i=0;i<8;++i) build_microseparator(i+1,i);
 }
 
-static u64 separator_answer(int s,int t){u64 z=INF;size_t a=(size_t)s*separator_count,b=(size_t)t*separator_count;for(int k=0;k<separator_count;++k){u64 x=separator_to[a+k],y=separator_from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
-static u64 subseparator_answer(int s,int t,int8_t side){SubSeparator& ss=subsep[side>0];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
-static u64 leafseparator_answer(int s,int t,int8_t parent){int index=parent==-2?0:parent==-1?1:parent==1?2:3;SubSeparator& ss=leafsep[index];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
-static u64 microseparator_answer(int s,int t,int8_t parent){int index=parent-1;MicroSeparator& ss=microsep[index];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
+static void build_separator(){
+ sparse_sep_in.assign(V,{});sparse_sep_out.assign(V,{});sparse_sep_start=std::chrono::steady_clock::now();
+ baseline_build_separator();
+ build_road_corridor_levels();
+ std::sort(sparse_sep_pending.begin(),sparse_sep_pending.end(),[](int a,int b){int la=road_corridor_level.empty()?0:road_corridor_level[a],lb=road_corridor_level.empty()?0:road_corridor_level[b];if(la!=lb)return la>lb;int da=fw.off[a+1]-fw.off[a]+rv.off[a+1]-rv.off[a],db=fw.off[b+1]-fw.off[b]+rv.off[b+1]-rv.off[b];return da!=db?da>db:a<b;});
+ sparse_sep_collecting=false;for(int root:sparse_sep_pending)sep_label_root(root);
+ double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-sparse_sep_start).count();
+ std::fprintf(stderr,"SPARSE_SEP done roots %d labels %llu pops %llu scans %llu checks %llu time %.6f failed %d\n",sparse_sep_roots,(unsigned long long)sparse_sep_count,(unsigned long long)sparse_sep_pops,(unsigned long long)sparse_sep_scans,(unsigned long long)sparse_sep_checks,elapsed,sparse_sep_failed);
+ if(sparse_sep_failed){sparse_sep_in.clear();sparse_sep_out.clear();baseline_build_separator();}
+ else sparse_sep_active=true;
+}static u64 separator_answer(int s,int t){if(sparse_sep_active)return sparse_sep_answer(s,t);u64 z=INF;size_t a=(size_t)s*separator_count,b=(size_t)t*separator_count;for(int k=0;k<separator_count;++k){u64 x=separator_to[a+k],y=separator_from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
+static u64 subseparator_answer(int s,int t,int8_t side){if(sparse_sep_active)return INF;SubSeparator& ss=subsep[side>0];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
+static u64 leafseparator_answer(int s,int t,int8_t parent){if(sparse_sep_active)return INF;int index=parent==-2?0:parent==-1?1:parent==1?2:3;SubSeparator& ss=leafsep[index];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
+static u64 microseparator_answer(int s,int t,int8_t parent){if(sparse_sep_active)return INF;int index=parent-1;MicroSeparator& ss=microsep[index];u64 z=INF;size_t a=(size_t)s*ss.count,b=(size_t)t*ss.count;for(int k=0;k<ss.count;++k){u64 x=ss.to[a+k],y=ss.from[b+k];if(x!=INF&&y!=INF)z=std::min(z,x+y);}return z;}
 
 static void grouped_side(const vector<int>& ids){
     ++epoch;hf.clear();int root=qs[ids[0]].t;int8_t side=separator_leaf[root];vector<int> touched;int remaining=0;

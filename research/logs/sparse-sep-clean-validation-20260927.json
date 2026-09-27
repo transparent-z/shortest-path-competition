@@ -1,0 +1,47 @@
+[
+  {
+    "name": "forced",
+    "exact": true,
+    "log": "/tmp/sparse_clean_forced.log"
+  },
+  {
+    "name": "fresh",
+    "exact": true,
+    "log": "/tmp/sparse_clean_fresh.log"
+  },
+  {
+    "name": "road2d",
+    "exact": true,
+    "log": "/tmp/sparse_clean_road2d.log"
+  },
+  {
+    "name": "lattice3d",
+    "exact": true,
+    "log": "/tmp/sparse_clean_lattice3d.log"
+  },
+  {
+    "name": "local2d",
+    "exact": true,
+    "log": "/tmp/sparse_clean_local2d.log"
+  },
+  {
+    "name": "scalefree",
+    "exact": true,
+    "log": "/tmp/sparse_clean_scalefree.log"
+  },
+  {
+    "name": "hugeq",
+    "exact": true,
+    "log": "/tmp/sparse_clean_hugeq.log"
+  },
+  {
+    "name": "wide64",
+    "exact": true,
+    "log": "/tmp/sparse_clean_wide64.log"
+  },
+  {
+    "name": "large",
+    "exact": true,
+    "log": "/tmp/sparse_clean_large.log"
+  }
+]

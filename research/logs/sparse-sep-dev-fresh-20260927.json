@@ -1,0 +1,37 @@
+[
+  {
+    "name": "fresh",
+    "exact": true,
+    "log": "/tmp/sparse_sep_fresh.log"
+  },
+  {
+    "name": "road2d",
+    "exact": true,
+    "log": "/tmp/sparse_sep_road2d.log"
+  },
+  {
+    "name": "lattice3d",
+    "exact": true,
+    "log": "/tmp/sparse_sep_lattice3d.log"
+  },
+  {
+    "name": "local2d",
+    "exact": true,
+    "log": "/tmp/sparse_sep_local2d.log"
+  },
+  {
+    "name": "scalefree",
+    "exact": true,
+    "log": "/tmp/sparse_sep_scalefree.log"
+  },
+  {
+    "name": "hugeq",
+    "exact": true,
+    "log": "/tmp/sparse_sep_hugeq.log"
+  },
+  {
+    "name": "wide64",
+    "exact": true,
+    "log": "/tmp/sparse_sep_wide64.log"
+  }
+]
