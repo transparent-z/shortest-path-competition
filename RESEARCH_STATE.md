@@ -4,7 +4,22 @@ Goal: formally certify Overall geometric mean >=150x; not yet achieved.
 
 ## Authoritative formal checkpoint and current candidate (2026-09-27)
 
-Formal baseline: all six large exact, Overall **88.35080960833166x**, Global
+Formal baseline update from the WSL six-large run: commit `7063c19` completed
+all six rows exact at **Overall 94.295x**, including `hugeq_large` at **5.087
+s**. This supersedes 88.35080960833166x as the score to beat. The matching
+WSL JSON must remain paired with source SHA256
+`817fe03416a0c8d529e074b876d0a0429bc6e1bdd47b8cf73e1f9fb18414d599`;
+the JSON is not present in this cloud checkout, so its unreported per-row
+times, RSS values, and extra Overall decimals must not be inferred here.
+The older 88.35080960833166x artifact remains the last independently preserved
+formal result in this repository and must not be overwritten.
+
+The current branch layers two cloud-screened candidates on that source: the
+15x15 local landmark grid (`8820ae9`) and eight-active-table wide ALT
+(`0adf4a4`). Neither has a formal six-large result yet. Cloud dev timings are
+screening evidence only, not a new Overall.
+
+Previous preserved baseline: all six large exact, Overall **88.35080960833166x**, Global
 126.6129459x, Local 43.0204920x. Source SHA256
 `4610587e83f4bd6e8ec92db0ae1efe7cd9ddf4167e6535b04439cff4f8b03fc0`;
 binary `2582aed37dab141b5d52d618ca4a14879c2d8747e7579c7b30a63bce9ad5401d`.
@@ -13,13 +28,13 @@ Preserved matching source/binary/result:
 Root official artifact remains `result-integrated-4610587-full.json`, SHA256
 `fe329dbec22b822e62dc24d2843bcb549c3c843000638782cf6739375948b972`.
 
-Current solver.cpp is the new sparse-separator candidate, source SHA256
+The sparse-separator source at commit `7063c19` has SHA256
 `817fe03416a0c8d529e074b876d0a0429bc6e1bdd47b8cf73e1f9fb18414d599`.
 It passed six dev, fresh seed and hugeq_large, with approximately 1.95x targeted
-gain and much lower memory. It is NOT yet formally full-graded. See the final
-sparse-separator entry and research/logs/production-sparse-sep-817fe034-validation.json.
-The old 88.3508x JSON belongs to the preserved baseline, not the current candidate.
-No new Overall is certified; the 150x goal remains unmet.
+gain and much lower memory, and the WSL full grade reported above is now its
+formal result. See the final sparse-separator entry and
+research/logs/production-sparse-sep-817fe034-validation.json. The old 88.3508x
+JSON remains a preserved rollback artifact; the 150x goal remains unmet.
 
 ## Historical checkpoint notes (superseded by 4610587e)
 

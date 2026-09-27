@@ -280,6 +280,7 @@ static vector<int64_t> ans;
 static vector<int> head, nextq;
 static vector<u64> from_landmark, to_landmark;
 static vector<uint32_t> local_grid_landmark;
+static constexpr int local_grid_side = 15;
 // Per-query heuristic memoization retained from the directed ALT path.
 // Landmark tables are immutable after preprocessing; the epoch stamp keeps
 // this cache exact when the same vertex is examined repeatedly in one query.
@@ -306,16 +307,16 @@ static void build_local_grid_landmarks(){
     // bound proves every finite landmark distance fits in uint32_t.
     uint32_t max_w=0;for(const Arc& e:fw.edge)max_w=std::max(max_w,(uint32_t)e.w);
     if((__int128)(V-1)*max_w>=UINT32_MAX)return;
-    auto started=std::chrono::steady_clock::now();local_grid_landmark.reserve((size_t)256*V);
-    for(int ay=0;ay<16;++ay)for(int ax=0;ax<16;++ax){int x=(int64_t)ax*torus2_side/16,y=(int64_t)ay*torus2_side/16;auto d=full_sssp(y*torus2_side+x,fw);for(u64 z:d){if(z==INF||z>UINT32_MAX){local_grid_landmark.clear();return;}local_grid_landmark.push_back((uint32_t)z);}}
-    std::fprintf(stderr,"LOCAL_GRID 256 preprocessing %.6f s\n",std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count());
+    auto started=std::chrono::steady_clock::now();local_grid_landmark.reserve((size_t)local_grid_side*local_grid_side*V);
+    for(int ay=0;ay<local_grid_side;++ay)for(int ax=0;ax<local_grid_side;++ax){int x=(int64_t)ax*torus2_side/local_grid_side,y=(int64_t)ay*torus2_side/local_grid_side;auto d=full_sssp(y*torus2_side+x,fw);for(u64 z:d){if(z==INF||z>UINT32_MAX){local_grid_landmark.clear();return;}local_grid_landmark.push_back((uint32_t)z);}}
+    std::fprintf(stderr,"LOCAL_GRID %d preprocessing %.6f s\n",local_grid_side*local_grid_side,std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count());
 }
 
 static int64_t local_grid_astar(int s,int t){
     if(s==t)return 0;int n=torus2_side,sx=s%n,sy=s/n,tx=t%n,ty=t/n,dx=std::abs(sx-tx),dy=std::abs(sy-ty);dx=std::min(dx,n-dx);dy=std::min(dy,n-dy);
     std::array<const uint32_t*,4> table{};std::array<u64,4> target{};int c=0;
-    if(dx+dy>96){std::array<std::pair<u64,int>,4>active;for(auto&x:active)x={0,-1};for(int k=0;k<256;++k){const uint32_t*p=local_grid_landmark.data()+(size_t)k*V;u64 a=p[s],b=p[t];std::pair<u64,int>x={a>b?a-b:b-a,k};for(int j=0;j<4;++j)if(x>active[j])std::swap(x,active[j]);}for(auto x:active){table[c]=local_grid_landmark.data()+(size_t)x.second*V;target[c]=table[c][t];++c;}}
-    else{std::array<std::pair<int,int>,16>xd,yd;for(int a=0;a<16;++a){int z=(int64_t)a*n/16,ax=std::abs(z-tx),ay=std::abs(z-ty);xd[a]={std::min(ax,n-ax),a};yd[a]={std::min(ay,n-ay),a};}std::nth_element(xd.begin(),xd.begin()+2,xd.end());std::nth_element(yd.begin(),yd.begin()+2,yd.end());for(int iy=0;iy<2;++iy)for(int ix=0;ix<2;++ix){int k=yd[iy].second*16+xd[ix].second;table[c]=local_grid_landmark.data()+(size_t)k*V;target[c]=table[c][t];++c;}}
+    if(dx+dy>96){std::array<std::pair<u64,int>,4>active;for(auto&x:active)x={0,-1};for(int k=0;k<local_grid_side*local_grid_side;++k){const uint32_t*p=local_grid_landmark.data()+(size_t)k*V;u64 a=p[s],b=p[t];std::pair<u64,int>x={a>b?a-b:b-a,k};for(int j=0;j<4;++j)if(x>active[j])std::swap(x,active[j]);}for(auto x:active){table[c]=local_grid_landmark.data()+(size_t)x.second*V;target[c]=table[c][t];++c;}}
+    else{std::array<std::pair<int,int>,local_grid_side>xd,yd;for(int a=0;a<local_grid_side;++a){int z=(int64_t)a*n/local_grid_side,ax=std::abs(z-tx),ay=std::abs(z-ty);xd[a]={std::min(ax,n-ax),a};yd[a]={std::min(ay,n-ay),a};}std::nth_element(xd.begin(),xd.begin()+2,xd.end());std::nth_element(yd.begin(),yd.begin()+2,yd.end());for(int iy=0;iy<2;++iy)for(int ix=0;ix<2;++ix){int k=yd[iy].second*local_grid_side+xd[ix].second;table[c]=local_grid_landmark.data()+(size_t)k*V;target[c]=table[c][t];++c;}}
     auto h=[&](int v){u64 z=0;for(int k=0;k<4;++k){u64 d=table[k][v];z=std::max(z,d>target[k]?d-target[k]:target[k]-d);}return z;};
     ++epoch;hf.clear();setf(s,0);current_fkey[s]=h(s);hf.push(current_fkey[s],s);while(!hf.empty()){auto[key,u]=hf.pop();u64 d=getf(u);if(key!=current_fkey[u])continue;if(u==t)return (int64_t)d;for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);current_fkey[e.to]=nd+h(e.to);hf.push(current_fkey[e.to],e.to);}}}return -1;
 }
@@ -397,11 +398,14 @@ static int64_t balanced_alt(int s, int t) {
 // Reusing the strongest four of the existing 24 landmark tables in a
 // one-sided A* avoids an unconstrained reverse frontier while preserving the
 // same exact consistent ALT lower bound.
-static int64_t forward_alt4(int s,int t){
+static int64_t forward_alt8(int s,int t){
     if(s==t)return 0;
-    std::array<std::pair<u64,int>,4> active;for(auto& a:active)a={0,-1};
-    for(int k=0;k<landmark_count;++k){size_t z=(size_t)k*V;u64 a=from_landmark[z+s],b=from_landmark[z+t];if(a==INF||b==INF)continue;std::pair<u64,int> score={a>b?a-b:b-a,k};for(int j=0;j<4;++j)if(score>active[j])std::swap(score,active[j]);}
-    std::array<const u64*,4> table{};std::array<u64,4> target{};int count=0;for(auto x:active)if(x.second>=0){table[count]=from_landmark.data()+(size_t)x.second*V;target[count]=table[count][t];++count;}
+    // Eight tables cost more per potential than the former four, but their
+    // tighter maximum removes enough high-weight-torus search work to win
+    // end-to-end while preserving the same consistent ALT lower bound.
+    std::array<std::pair<u64,int>,8> active;for(auto& a:active)a={0,-1};
+    for(int k=0;k<landmark_count;++k){size_t z=(size_t)k*V;u64 a=from_landmark[z+s],b=from_landmark[z+t];if(a==INF||b==INF)continue;std::pair<u64,int> score={a>b?a-b:b-a,k};for(int j=0;j<8;++j)if(score>active[j])std::swap(score,active[j]);}
+    std::array<const u64*,8> table{};std::array<u64,8> target{};int count=0;for(auto x:active)if(x.second>=0){table[count]=from_landmark.data()+(size_t)x.second*V;target[count]=table[count][t];++count;}
     auto h=[&](int v){u64 z=0;for(int k=0;k<count;++k){u64 d=table[k][v];if(d!=INF&&target[k]!=INF)z=std::max(z,d>target[k]?d-target[k]:target[k]-d);}return z;};
     ++epoch;hf.clear();setf(s,0);hf.push(h(s),s);
     while(!hf.empty()){auto[key,u]=hf.pop();u64 d=getf(u);if(key!=d+h(u))continue;if(u==t)return (int64_t)d;for(int j=fw.off[u];j<fw.off[u+1];++j){Arc e=fw.edge[j];u64 nd=d+(uint32_t)e.w;if(nd<getf(e.to)){setf(e.to,nd);hf.push(nd+h(e.to),e.to);}}}
@@ -716,7 +720,7 @@ static void run_queries(const char* qpath, const char* opath) {
     for(auto& kv:byt) if(graph_directed&&!balance_by_arc_work&&kv.second.size()>=4){ grouped(kv.second,false); for(int id:kv.second)done[id]=1; }
     // Balanced-source huge-Q workloads amortize one search over many targets.
     for(auto& kv:bys){ vector<int> ids; if(kv.second.size()>=4){ for(int id:kv.second)if(!done[id])ids.push_back(id); if(ids.size()>=4){grouped(ids,true);for(int id:ids)done[id]=1;} } }
-    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=(!local_grid_landmark.empty()?local_grid_astar(qs[i].s,qs[i].t):landmark_count?(!graph_directed?(lattice_side?forward_alt4(qs[i].s,qs[i].t):balanced_alt(qs[i].s,qs[i].t)):alt_astar(qs[i].s,qs[i].t)):bidijkstra(qs[i].s,qs[i].t));
+    for(int i=0;i<Q;++i) if(ans[i]<0 && !done[i]) ans[i]=(!local_grid_landmark.empty()?local_grid_astar(qs[i].s,qs[i].t):landmark_count?(!graph_directed?(lattice_side?forward_alt8(qs[i].s,qs[i].t):balanced_alt(qs[i].s,qs[i].t)):alt_astar(qs[i].s,qs[i].t)):bidijkstra(qs[i].s,qs[i].t));
     FILE* out=std::fopen(opath,"wb"); if(!out){std::fprintf(stderr,"cannot open output\n");std::exit(1);} char buf[64];
     for(auto x:ans){int n=std::snprintf(buf,sizeof(buf),"%lld\n",(long long)x);std::fwrite(buf,1,n,out);} std::fclose(out);
 }
